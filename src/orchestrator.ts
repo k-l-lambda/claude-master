@@ -8,14 +8,16 @@ export class Orchestrator {
   private worker: WorkerManager;
   private config: Config;
   private currentRound: number = 0;
+  private userInstruction: string;
 
-  constructor(config: Config, userSystemPrompt: string) {
+  constructor(config: Config, userInstruction: string) {
     this.config = config;
-    this.instructor = new InstructorManager(config, userSystemPrompt);
+    this.userInstruction = userInstruction;
+    this.instructor = new InstructorManager(config, userInstruction);
     this.worker = new WorkerManager(config);
   }
 
-  async run(userTask: string): Promise<void> {
+  async run(): Promise<void> {
     Display.info(`Starting dual-AI orchestration system`);
     Display.info(`Instructor Model: ${this.config.instructorModel}`);
     Display.info(`Worker Default Model: ${this.config.workerModel}`);
@@ -25,18 +27,19 @@ export class Orchestrator {
     Display.newline();
 
     try {
-      // Initial user task to Instructor
+      // Initial instruction to Instructor
       this.currentRound = 1;
       Display.round(this.currentRound, this.config.maxRounds);
 
-      Display.header(InstanceType.INSTRUCTOR, 'Processing User Task');
-      Display.system('User Task: ' + userTask);
+      Display.header(InstanceType.INSTRUCTOR, 'Processing Initial Instruction');
+      Display.system('User Instruction: ' + this.userInstruction);
 
       let thinkingBuffer = '';
       let textBuffer = '';
 
+      // Send a simple prompt to start the Instructor thinking
       const instructorResponse = await this.instructor.processUserInput(
-        userTask,
+        "Start working on the task.",
         (chunk) => {
           if (thinkingBuffer === '') {
             Display.newline();

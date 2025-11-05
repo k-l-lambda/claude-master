@@ -7,7 +7,7 @@ A CLI tool that orchestrates two Claude AI instances working together:
 ## Quick Links
 
 - [Quick Start Guide](QUICKSTART.md) - Get started quickly
-- [System Prompt Guide](SYSTEM_PROMPT_GUIDE.md) - Learn how to craft effective system prompts
+- [Example Prompts](EXAMPLE_PROMPTS.md) - Reference prompts for different use cases
 - [Implementation Details](IMPLEMENTATION.md) - Technical documentation
 
 ## Architecture
@@ -71,20 +71,29 @@ Pass credentials directly via command line options (see CLI Options below).
 
 ### Basic Usage
 
+The `<instruction>` argument is used as the system prompt/context for the Instructor. A common pattern is to put task details in a README.md file:
+
 ```bash
 # With .env.local configured
-npm start "Create a simple Express.js server with health check endpoint"
+npm start "Read the README.md to be aware about our task"
 
 # Or with environment variables
 source claude.local.sh
-npm start "Create a simple Express.js server with health check endpoint"
+npm start "Read the CLAUDE.md file to understand the task"
+```
+
+### Direct Task Description
+
+You can also provide the task description directly:
+
+```bash
+npm start "Create a simple Express.js server with health check endpoint. Use TypeScript and follow best practices."
 ```
 
 ### With Custom Options
 
 ```bash
-node dist/index.js "Your task here" \
-  --system-prompt "You are an expert in Node.js development" \
+node dist/index.js "Read the README.md to be aware about our task" \
   --max-rounds 10 \
   --instructor-model claude-sonnet-4-5-20250929 \
   --worker-model claude-sonnet-4-5-20250929
@@ -92,8 +101,9 @@ node dist/index.js "Your task here" \
 
 ### CLI Options
 
-- `<task>` - The task to execute (required)
-- `-s, --system-prompt <prompt>` - Custom system prompt for Instructor
+- `<instruction>` - Instruction/context for Instructor (required). Examples:
+  - `"Read the README.md to be aware about our task"`
+  - `"Create a REST API with authentication"`
 - `-r, --max-rounds <number>` - Maximum number of conversation rounds
 - `-i, --instructor-model <model>` - Model for Instructor (default: claude-sonnet-4-5-20250929)
 - `-w, --worker-model <model>` - Default model for Worker (default: claude-sonnet-4-5-20250929)
@@ -117,118 +127,66 @@ Required:
 Optional:
 - `ANTHROPIC_BASE_URL` - Custom API endpoint
 
-### Example System Prompts for Instructor
+### Usage Patterns
 
-The system prompt customizes how the Instructor plans and guides the Worker. Here are some examples:
+**Pattern 1: Task in README file (Recommended)**
 
-**Important: Your system prompts should remind the Instructor of its capabilities:**
-- Use `Tell worker: [instruction]` to send specific instructions to Worker (or omit prefix to send entire response)
-- Mention model preference with phrases like `use opus`, `use sonnet`, or `use haiku` when needed
-- Say `DONE` when the task is complete
-- You can read, write, and edit files, and use git commands to understand and modify the codebase
+Put your task description in a CLAUDE.md or README.md file in your project:
 
-**Example 1: General Software Development**
-```bash
-node dist/index.js "Create a REST API for a todo app" \
-  --system-prompt "You are a senior software architect. Focus on:
-- Clean code architecture and best practices
-- Proper error handling and validation
-- Security considerations
-- Clear and detailed instructions for the Worker
+```markdown
+# Task Description
 
-Communication with Worker:
-- Use 'Tell worker: [instruction]' to give clear instructions
-- Use 'use opus/sonnet/haiku' to specify model when needed
-- Say 'DONE' when task is complete
+Create a REST API for a todo application with the following requirements:
+- Use Express.js and TypeScript
+- Implement CRUD operations
+- Add input validation
+- Include error handling
+- Write tests
 
-Break down complex tasks into small, manageable steps."
+Follow TDD principles: write tests first, then implement.
 ```
 
-**Example 2: Focus on Testing**
+Create a prompt file or use inline:
 ```bash
-node dist/index.js "Implement a user authentication system" \
-  --system-prompt "You are a test-driven development expert. For every feature:
-1. First instruct Worker to write tests
-2. Then implement the feature
-3. Ensure all tests pass before moving forward
+npm start "You are the INSTRUCTOR in a dual-AI system.
 
-How to communicate:
-- Tell worker: [your instruction here]
-- Optionally specify: 'use opus' for complex tasks, 'use haiku' for simple tasks
-- Say 'DONE' when complete
+Read the README.md to understand the task.
 
-Emphasize code quality and test coverage."
-```
-
-**Example 3: Performance-Focused**
-```bash
-node dist/index.js "Optimize the database queries in this project" \
-  --system-prompt "You are a performance optimization specialist.
-- Analyze code thoroughly before giving instructions
-- Focus on performance bottlenecks and optimization opportunities
-- Use git tools to review existing code
-- Provide specific, measurable performance goals
-- Guide Worker to implement efficient solutions
-
-Instructions format:
-- Tell worker: [specific optimization task]
-- Use 'use opus' for complex analysis tasks
-- Say 'DONE' when optimizations are complete"
-```
-
-**Example 4: Documentation-First Approach**
-```bash
-node dist/index.js "Add a new payment module" \
-  --system-prompt "You are a documentation-driven developer.
-For each task:
-1. First have Worker create detailed documentation
-2. Then implement according to the documented design
-3. Add inline comments and API documentation
+Your capabilities:
+- File reading, writing, editing, and git tools
+- Extended thinking for planning
+- Cannot execute bash (only Worker can)
 
 Communication:
 - Tell worker: [instruction]
-- Say 'DONE' when everything is documented and implemented
+- use opus/sonnet/haiku for model selection
+- DONE when complete
 
-Ensure everything is well-documented and maintainable."
+Guide Worker step by step through implementation."
 ```
 
-**Example 5: Security-Focused**
+**Pattern 2: Direct instruction**
+
 ```bash
-node dist/index.js "Build a file upload feature" \
-  --system-prompt "You are a security engineer.
-- Prioritize security at every step
-- Think about potential vulnerabilities (injection, XSS, CSRF, etc.)
-- Instruct Worker to implement proper input validation
-- Ensure secure file handling and storage
-- Review Worker's implementation for security issues
-
-How to instruct:
-- Tell worker: [security-focused instruction]
-- Use 'use opus' for critical security implementations
-- Say 'DONE' when security review is complete"
+npm start "Create a simple HTTP server that returns 'Hello World' on GET /. Use Node.js and include a test."
 ```
 
-**Example 6: Minimal Guidance (Let Instructor Decide)**
+**Pattern 3: Role-based with specific methodology**
+
 ```bash
-node dist/index.js "Create a blog system" \
-  --system-prompt "You are an experienced tech lead. Use your judgment to:
-- Determine the best approach for the task
-- Break down work efficiently
-- Choose appropriate technologies
-- Guide Worker with clear, concise instructions
+npm start "You are a TDD expert working with a Worker AI.
 
-Remember:
-- Tell worker: [instruction] (or just give the instruction directly)
-- Specify model if needed: 'use opus/sonnet/haiku'
-- Say 'DONE' when finished"
+Task: Create a calculator module with add, subtract, multiply, divide.
+
+For each function:
+1. Tell worker to write tests first
+2. Tell worker to implement
+3. Verify tests pass
+
+Communication: 'Tell worker: [instruction]', 'DONE' when complete."
 ```
 
-**Tips for Writing System Prompts:**
-- Be specific about the domain expertise (e.g., "backend developer", "frontend specialist")
-- Define the workflow or methodology (e.g., TDD, documentation-first)
-- Specify priorities (e.g., security, performance, maintainability)
-- Mention any constraints or requirements
-- Keep it focused on planning and guidance (not implementation)
+**See [EXAMPLE_PROMPTS.md](EXAMPLE_PROMPTS.md) for more examples.**
 
 ## Conversation Flow
 

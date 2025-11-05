@@ -20,14 +20,13 @@ program
   .name('claude-master')
   .description('CLI tool to orchestrate Instructor and Worker Claude instances')
   .version('1.0.0')
-  .argument('<task>', 'The task to execute')
-  .option('-s, --system-prompt <prompt>', 'Custom system prompt for Instructor', '')
+  .argument('<instruction>', 'Instruction for Instructor (e.g., "Read the README.md to be aware about our task")')
   .option('-r, --max-rounds <number>', 'Maximum number of conversation rounds', parseInt)
   .option('-i, --instructor-model <model>', 'Model for Instructor', 'claude-sonnet-4-5-20250929')
   .option('-w, --worker-model <model>', 'Default model for Worker', 'claude-sonnet-4-5-20250929')
   .option('-k, --api-key <key>', 'Anthropic API key (or use ANTHROPIC_AUTH_TOKEN env var or .env.local)')
   .option('-u, --base-url <url>', 'API base URL (or use ANTHROPIC_BASE_URL env var or .env.local)')
-  .action(async (task, options) => {
+  .action(async (instruction, options) => {
     try {
       // Get API key from options or environment
       const apiKey = options.apiKey
@@ -52,8 +51,8 @@ program
       };
 
       // Create and run orchestrator
-      const orchestrator = new Orchestrator(config, options.systemPrompt);
-      await orchestrator.run(task);
+      const orchestrator = new Orchestrator(config, instruction);
+      await orchestrator.run();
 
       Display.newline();
       Display.success('Task completed successfully');

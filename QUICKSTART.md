@@ -34,21 +34,46 @@ export ANTHROPIC_AUTH_TOKEN="your-api-key"
 
 ```bash
 # With .env.local configured (recommended)
-npm start "Create a simple Express.js server"
+npm start "Read the README.md to be aware about our task"
 
 # Or set up environment (legacy method)
 source ./claude.local.sh
-npm start "Create a simple Express.js server"
+npm start "Read the CLAUDE.md file to understand the task"
 
 # Or use the compiled version directly
-node dist/index.js "Your task here"
+node dist/index.js "Create a simple Express.js server"
+```
+
+## Usage Patterns
+
+**Pattern 1: Task in README (Recommended)**
+
+Create a README.md or CLAUDE.md with your task:
+```markdown
+# Task
+Create a REST API with Express.js and TypeScript.
+Include CRUD operations and tests.
+```
+
+Then:
+```bash
+npm start "Read the README.md to be aware about our task"
+```
+
+**Pattern 2: Direct Instruction**
+```bash
+npm start "Create a calculator module with add, subtract, multiply, divide functions"
+```
+
+**Pattern 3: Role-based Instruction**
+```bash
+npm start "You are a TDD expert. Create a string utility library. Write tests first, then implement."
 ```
 
 ## CLI Options
 
 ```bash
-node dist/index.js "Your task" \
-  --system-prompt "You are an expert in Node.js" \
+node dist/index.js "Your instruction" \
   --max-rounds 10 \
   --instructor-model claude-sonnet-4-5-20250929 \
   --worker-model claude-sonnet-4-5-20250929 \
@@ -56,25 +81,7 @@ node dist/index.js "Your task" \
   --base-url "https://api.anthropic.com"
 ```
 
-## System Prompt Examples
-
-**For TDD (Test-Driven Development):**
-```bash
-npm start "Create a calculator module" \
-  --system-prompt "You are a TDD expert. Always have Worker write tests first, then implement to pass the tests."
-```
-
-**For Security-Focused Development:**
-```bash
-npm start "Build a user login system" \
-  --system-prompt "You are a security engineer. Review all code for vulnerabilities and ensure proper input validation and authentication."
-```
-
-**For Performance Optimization:**
-```bash
-npm start "Optimize this application" \
-  --system-prompt "You are a performance specialist. Analyze code using git tools, identify bottlenecks, and guide Worker to implement efficient solutions."
-```
+Note: `--system-prompt` option has been removed. The instruction argument IS the system prompt/context for the Instructor.
 
 ## Message Format
 
@@ -109,17 +116,21 @@ The conversation ends.
 
 ## Example Conversation
 
+**User runs:**
+```bash
+npm start "Read the CLAUDE.md to understand our task"
+```
+
 **Round 1:**
-- User: "Create a TypeScript calculator"
-- Instructor: *thinks* → "Tell worker: Create a basic calculator class in TypeScript with add, subtract, multiply, divide methods"
+- Instructor: *thinks* → *reads CLAUDE.md* → "Tell worker: Create the project structure with src/, tests/, and package.json"
 
 **Round 2:**
-- Worker: "I've created the Calculator class with all four methods"
-- Instructor: *receives "Worker says: I've created..."* → *thinks* → "Tell worker: Add unit tests for all calculator methods"
+- Worker: "I've created the project structure"
+- Instructor: *receives "Worker says: I've created..."* → *thinks* → "Tell worker: Implement the main function as described in CLAUDE.md"
 
 **Round 3:**
-- Worker: "I've added comprehensive tests for all methods"
-- Instructor: *receives "Worker says: I've added..."* → *thinks* → "DONE"
+- Worker: "I've implemented the main function with tests"
+- Instructor: *receives "Worker says: I've implemented..."* → *thinks* → "DONE"
 
 ## Features
 

@@ -12,23 +12,8 @@ export class WorkerManager {
   constructor(config: Config) {
     this.client = new ClaudeClient(config);
     this.config = config;
-    this.systemPrompt = this.buildSystemPrompt();
-  }
-
-  private buildSystemPrompt(): string {
-    return `You are the WORKER in a dual-AI system. Your role is to:
-
-1. Receive instructions from the INSTRUCTOR AI
-2. Execute tasks by writing code, editing files, and running commands
-3. Provide detailed responses about what you've done
-4. Ask for clarification if instructions are unclear
-
-IMPORTANT:
-- You have full access to file operations (read, write, edit) and safe bash commands
-- You do NOT have access to git commands or other dangerous operations
-- Focus on implementation and execution
-- Provide clear, detailed responses about your actions
-- If you encounter errors or blockers, explain them clearly`;
+    // Simple default - Instructor can override by instructing Worker
+    this.systemPrompt = 'You are a helpful AI assistant that follows instructions to implement tasks.';
   }
 
   async processInstruction(
