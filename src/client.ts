@@ -8,6 +8,7 @@ export class ClaudeClient {
   constructor(config: Config) {
     this.config = config;
     this.client = new Anthropic({
+      authToken: config.authToken,
       apiKey: config.apiKey,
       baseURL: config.baseURL,
     });

@@ -39,13 +39,17 @@ program
       process.chdir(workDir);
       Display.info(`Working directory: ${workDir}`);
 
+      // Get auth token from environment
+      const authToken = process.env.ANTHROPIC_AUTH_TOKEN || '';
+
       // Get API key from options or environment
       const apiKey = options.apiKey
-        || process.env.ANTHROPIC_AUTH_TOKEN
-        || process.env.ANTHROPIC_API_KEY;
+        || process.env.ANTHROPIC_API_KEY
+        || undefined;
 
-      if (!apiKey) {
-        Display.error('API key is required. Set ANTHROPIC_AUTH_TOKEN in .env.local, environment variable, or use --api-key option');
+      // Validate that at least one is provided
+      if (!authToken && !apiKey) {
+        Display.error('Auth token or API key is required. Set ANTHROPIC_AUTH_TOKEN in .env.local, environment variable, or use --api-key option');
         process.exit(1);
       }
 
@@ -54,6 +58,7 @@ program
 
       // Build config
       const config: Config = {
+        authToken,
         apiKey,
         baseURL,
         instructorModel: options.instructorModel,
