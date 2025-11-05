@@ -94,6 +94,7 @@ npm start "Create a simple Express.js server with health check endpoint. Use Typ
 
 ```bash
 node dist/index.js "Read the README.md to be aware about our task" \
+  --work-dir /path/to/your/project \
   --max-rounds 10 \
   --instructor-model claude-sonnet-4-5-20250929 \
   --worker-model claude-sonnet-4-5-20250929
@@ -104,11 +105,15 @@ node dist/index.js "Read the README.md to be aware about our task" \
 - `<instruction>` - Instruction/context for Instructor (required). Examples:
   - `"Read the README.md to be aware about our task"`
   - `"Create a REST API with authentication"`
+- `-d, --work-dir <path>` - Working directory for both Instructor and Worker (default: current directory)
 - `-r, --max-rounds <number>` - Maximum number of conversation rounds
 - `-i, --instructor-model <model>` - Model for Instructor (default: claude-sonnet-4-5-20250929)
 - `-w, --worker-model <model>` - Default model for Worker (default: claude-sonnet-4-5-20250929)
 - `-k, --api-key <key>` - Anthropic API key (or use ANTHROPIC_AUTH_TOKEN in .env.local or env var)
 - `-u, --base-url <url>` - API base URL (or use ANTHROPIC_BASE_URL in .env.local or env var)
+
+**Note on Work Directory:**
+Both Instructor and Worker operate in the specified work directory. All file operations (reading, writing, editing, git commands) happen relative to this directory.
 
 ### Configuration Priority
 

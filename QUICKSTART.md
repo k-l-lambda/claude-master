@@ -74,6 +74,7 @@ npm start "You are a TDD expert. Create a string utility library. Write tests fi
 
 ```bash
 node dist/index.js "Your instruction" \
+  --work-dir /path/to/project \
   --max-rounds 10 \
   --instructor-model claude-sonnet-4-5-20250929 \
   --worker-model claude-sonnet-4-5-20250929 \
@@ -81,7 +82,39 @@ node dist/index.js "Your instruction" \
   --base-url "https://api.anthropic.com"
 ```
 
+**Key Options:**
+- `-d, --work-dir <path>` - Working directory (defaults to current directory)
+- `-r, --max-rounds <number>` - Max conversation rounds
+- `-i, --instructor-model` - Model for Instructor
+- `-w, --worker-model` - Model for Worker
+
 Note: `--system-prompt` option has been removed. The instruction argument IS the system prompt/context for the Instructor.
+
+## Using Work Directory
+
+Run claude-master on a different project without changing directories:
+
+```bash
+# Work on project in different directory
+cd ~/claude-master
+node dist/index.js "Read the README.md and implement the features" \
+  --work-dir ~/my-project
+
+# Or use absolute path
+node dist/index.js "Refactor the codebase" \
+  --work-dir /home/user/workspace/my-app
+```
+
+The tool will:
+1. Change to the specified work directory
+2. **Both Instructor and Worker operate in this directory**
+3. All file operations (read, write, edit, git) happen in the work directory
+4. Display the working directory at startup
+
+This is useful when:
+- Running claude-master from a different location
+- Working on multiple projects
+- Automating tasks across different codebases
 
 ## Message Format
 

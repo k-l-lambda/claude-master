@@ -21,6 +21,7 @@ program
   .description('CLI tool to orchestrate Instructor and Worker Claude instances')
   .version('1.0.0')
   .argument('<instruction>', 'Instruction for Instructor (e.g., "Read the README.md to be aware about our task")')
+  .option('-d, --work-dir <path>', 'Working directory for the project', process.cwd())
   .option('-r, --max-rounds <number>', 'Maximum number of conversation rounds', parseInt)
   .option('-i, --instructor-model <model>', 'Model for Instructor', 'claude-sonnet-4-5-20250929')
   .option('-w, --worker-model <model>', 'Default model for Worker', 'claude-sonnet-4-5-20250929')
@@ -28,6 +29,16 @@ program
   .option('-u, --base-url <url>', 'API base URL (or use ANTHROPIC_BASE_URL env var or .env.local)')
   .action(async (instruction, options) => {
     try {
+      // Change to work directory if specified
+      const workDir = resolve(options.workDir);
+      if (!existsSync(workDir)) {
+        Display.error(`Work directory does not exist: ${workDir}`);
+        process.exit(1);
+      }
+
+      process.chdir(workDir);
+      Display.info(`Working directory: ${workDir}`);
+
       // Get API key from options or environment
       const apiKey = options.apiKey
         || process.env.ANTHROPIC_AUTH_TOKEN
