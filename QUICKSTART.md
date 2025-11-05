@@ -7,13 +7,37 @@ npm install
 npm run build
 ```
 
+## Configuration
+
+**Recommended: Create a `.env.local` file**
+
+```bash
+# Copy the example
+cp .env.example .env.local
+
+# Edit with your values
+nano .env.local
+```
+
+Add your API key:
+```bash
+ANTHROPIC_AUTH_TOKEN=your-api-key-here
+ANTHROPIC_BASE_URL=https://api.anthropic.com  # optional
+```
+
+**Alternative: Use environment variables**
+```bash
+export ANTHROPIC_AUTH_TOKEN="your-api-key"
+```
+
 ## Basic Usage
 
 ```bash
-# Set up environment (API keys)
-source ./claude.local.sh
+# With .env.local configured (recommended)
+npm start "Create a simple Express.js server"
 
-# Run a task
+# Or set up environment (legacy method)
+source ./claude.local.sh
 npm start "Create a simple Express.js server"
 
 # Or use the compiled version directly
@@ -99,12 +123,13 @@ The conversation ends.
 
 ## Features
 
+✅ `.env.local` file support for easy configuration
 ✅ Extended thinking for Instructor
 ✅ Natural language message format
 ✅ Configurable round limits
 ✅ Model selection per task
 ✅ Color-coded console output
-✅ Permission separation (Instructor=read/git, Worker=full except git)
+✅ Permission separation (Instructor=read/write/git, Worker=full except git)
 ✅ Streaming responses
 
 ## Common Commands
@@ -125,11 +150,21 @@ node dist/index.js --help
 
 ## Environment Variables
 
+You can set these in `.env.local` file (recommended) or as environment variables:
+
 Required:
 - `ANTHROPIC_AUTH_TOKEN` - Your API key
 
 Optional:
 - `ANTHROPIC_BASE_URL` - Custom API endpoint
+
+## Configuration Files
+
+```
+.env.example    # Template for environment variables
+.env.local            # Your actual config (git-ignored)
+claude.local.sh       # Legacy shell script (optional)
+```
 
 ## Project Structure
 
@@ -149,8 +184,14 @@ src/
 
 **API Key Error:**
 ```bash
+# Option 1: Use .env.local (recommended)
+cp .env.example .env.local
+# Edit .env.local and add your key
+
+# Option 2: Set environment variable
 export ANTHROPIC_AUTH_TOKEN="your-key-here"
-# or
+
+# Option 3: Pass via CLI
 node dist/index.js "task" --api-key "your-key"
 ```
 

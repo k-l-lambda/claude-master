@@ -37,12 +37,45 @@ npm install
 npm run build
 ```
 
+## Configuration
+
+### Option 1: Using .env.local file (Recommended)
+
+Create a `.env.local` file in the project root:
+
+```bash
+# Copy the example file
+cp .env.example .env.local
+
+# Edit .env.local with your values
+```
+
+Example `.env.local`:
+```bash
+ANTHROPIC_AUTH_TOKEN=your-api-key-here
+ANTHROPIC_BASE_URL=https://api.anthropic.com
+```
+
+### Option 2: Using environment variables
+
+```bash
+export ANTHROPIC_AUTH_TOKEN="your-api-key-here"
+export ANTHROPIC_BASE_URL="https://api.anthropic.com"
+```
+
+### Option 3: Using CLI options
+
+Pass credentials directly via command line options (see CLI Options below).
+
 ## Usage
 
 ### Basic Usage
 
 ```bash
-# Using environment variables from claude.local.sh
+# With .env.local configured
+npm start "Create a simple Express.js server with health check endpoint"
+
+# Or with environment variables
 source claude.local.sh
 npm start "Create a simple Express.js server with health check endpoint"
 ```
@@ -64,10 +97,19 @@ node dist/index.js "Your task here" \
 - `-r, --max-rounds <number>` - Maximum number of conversation rounds
 - `-i, --instructor-model <model>` - Model for Instructor (default: claude-sonnet-4-5-20250929)
 - `-w, --worker-model <model>` - Default model for Worker (default: claude-sonnet-4-5-20250929)
-- `-k, --api-key <key>` - Anthropic API key (or use ANTHROPIC_AUTH_TOKEN env var)
-- `-u, --base-url <url>` - API base URL (or use ANTHROPIC_BASE_URL env var)
+- `-k, --api-key <key>` - Anthropic API key (or use ANTHROPIC_AUTH_TOKEN in .env.local or env var)
+- `-u, --base-url <url>` - API base URL (or use ANTHROPIC_BASE_URL in .env.local or env var)
+
+### Configuration Priority
+
+Configuration values are loaded in the following order (highest priority first):
+1. CLI options (`--api-key`, `--base-url`)
+2. Environment variables
+3. `.env.local` file
 
 ### Environment Variables
+
+The following variables can be set in `.env.local`:
 
 Required:
 - `ANTHROPIC_AUTH_TOKEN` or `ANTHROPIC_API_KEY` - Your Anthropic API key
