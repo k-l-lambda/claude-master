@@ -1,6 +1,6 @@
 import { Tool } from './types.js';
 
-// Limited tools for Instructor (file reading and git only)
+// Tools for Instructor (file reading, writing, and git)
 export const instructorTools: Tool[] = [
   {
     name: 'read_file',
@@ -14,6 +14,50 @@ export const instructorTools: Tool[] = [
         },
       },
       required: ['file_path'],
+    },
+  },
+  {
+    name: 'write_file',
+    description: 'Write content to a file',
+    input_schema: {
+      type: 'object',
+      properties: {
+        file_path: {
+          type: 'string',
+          description: 'Absolute path to the file to write',
+        },
+        content: {
+          type: 'string',
+          description: 'Content to write to the file',
+        },
+      },
+      required: ['file_path', 'content'],
+    },
+  },
+  {
+    name: 'edit_file',
+    description: 'Edit a file by replacing old string with new string',
+    input_schema: {
+      type: 'object',
+      properties: {
+        file_path: {
+          type: 'string',
+          description: 'Absolute path to the file to edit',
+        },
+        old_string: {
+          type: 'string',
+          description: 'Text to replace',
+        },
+        new_string: {
+          type: 'string',
+          description: 'Text to replace with',
+        },
+        replace_all: {
+          type: 'boolean',
+          description: 'Replace all occurrences',
+        },
+      },
+      required: ['file_path', 'old_string', 'new_string'],
     },
   },
   {

@@ -26,24 +26,20 @@ export class InstructorManager {
 
 ${userPrompt}
 
+YOUR CAPABILITIES:
+- You have access to file reading, writing, editing, and git tools
+- You can directly work with files and git to understand and plan the codebase changes
+- You CANNOT execute bash commands (only Worker can)
+- Focus on strategic planning and high-level guidance
+
 IMPORTANT INSTRUCTIONS:
-- You have access to file reading and git tools only - use them to understand the codebase
-- You CANNOT write or edit files directly - instruct the WORKER to do so
-- After seeing WORKER's response, respond in this format:
-
-<instruction>
-[Your instruction to the WORKER - be specific and clear]
-</instruction>
-
-<worker_model>
-[Model to use: "opus", "sonnet", or "haiku". Default: sonnet]
-</worker_model>
-
-<continue>
-[YES or NO - whether to continue the conversation]
-</continue>
-
-Use your thinking capability to deeply analyze the problem before giving instructions.`;
+- When you receive messages from WORKER (prefixed with "Worker says:"), review and provide guidance
+- To send instructions to WORKER, use format: "Tell worker: [your instruction]"
+  - Only text AFTER "Tell worker:" will be sent to WORKER
+  - If you don't use "Tell worker:", your ENTIRE response will be sent to WORKER
+- To specify Worker's model, mention: "use opus" / "use sonnet" / "use haiku"
+- When task is complete, say "DONE" to end the conversation
+- Use your thinking capability to deeply analyze the problem before giving instructions.`;
   }
 
   async processUserInput(
@@ -98,7 +94,7 @@ Use your thinking capability to deeply analyze the problem before giving instruc
   ): Promise<InstructorResponse> {
     this.conversationHistory.push({
       role: 'user',
-      content: `WORKER's response:\n\n${workerResponse}`,
+      content: `Worker says: ${workerResponse}`,
     });
 
     const response = await this.client.streamMessage(
@@ -137,29 +133,36 @@ Use your thinking capability to deeply analyze the problem before giving instruc
   }
 
   private parseInstructorResponse(text: string, thinking: string): InstructorResponse {
-    const instructionMatch = text.match(/<instruction>([\s\S]*?)<\/instruction>/);
-    const modelMatch = text.match(/<worker_model>([\s\S]*?)<\/worker_model>/);
-    const continueMatch = text.match(/<continue>([\s\S]*?)<\/continue>/);
+    // Check if Instructor is done
+    const isDone = text.trim().toUpperCase().includes('DONE');
 
+    // Extract instruction after "Tell worker:" (case insensitive)
+    const tellWorkerMatch = text.match(/tell\s+worker:\s*([\s\S]*)/i);
+    let instruction = '';
+
+    if (tellWorkerMatch) {
+      // Only send text after "Tell worker:"
+      instruction = tellWorkerMatch[1].trim();
+    } else {
+      // Send entire response to Worker
+      instruction = text.trim();
+    }
+
+    // Check for model hints (optional, can be anywhere in the response)
     let workerModel = this.config.workerModel;
-    if (modelMatch) {
-      const modelStr = modelMatch[1].trim().toLowerCase();
-      if (modelStr.includes('opus')) {
-        workerModel = 'claude-opus-4-1-20250805';
-      } else if (modelStr.includes('haiku')) {
-        workerModel = 'claude-3-5-haiku-20241022';
-      } else {
-        workerModel = 'claude-sonnet-4-5-20250929';
-      }
+    if (text.toLowerCase().includes('use opus') || text.toLowerCase().includes('model: opus')) {
+      workerModel = 'claude-opus-4-1-20250805';
+    } else if (text.toLowerCase().includes('use haiku') || text.toLowerCase().includes('model: haiku')) {
+      workerModel = 'claude-3-5-haiku-20241022';
+    } else if (text.toLowerCase().includes('use sonnet') || text.toLowerCase().includes('model: sonnet')) {
+      workerModel = 'claude-sonnet-4-5-20250929';
     }
 
     return {
       thinking,
-      instruction: instructionMatch ? instructionMatch[1].trim() : text,
+      instruction,
       workerModel,
-      shouldContinue: continueMatch
-        ? continueMatch[1].trim().toUpperCase() === 'YES'
-        : true,
+      shouldContinue: !isDone && instruction.length > 0,
     };
   }
 
