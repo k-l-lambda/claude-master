@@ -175,6 +175,34 @@ npm start "Read the CLAUDE.md to understand our task"
 ✅ Color-coded console output
 ✅ Permission separation (Instructor=read/write/git, Worker=full except git)
 ✅ Streaming responses
+✅ **Interactive interruption with ESC key**
+
+## Interactive Control
+
+**Press ESC during execution to pause and intervene:**
+
+```
+[Round 3]
+Worker is implementing feature X...
+<Press ESC>
+
+⏸️  Execution paused by user (ESC pressed)
+Enter your instruction to Instructor (or press Enter to resume): Add error handling to this feature
+
+[INSTRUCTOR] Processing User Interruption
+Thinking...
+Tell worker: Add comprehensive error handling with try-catch blocks
+
+[WORKER] Processing Instruction
+Adding error handling...
+```
+
+**Use cases for ESC interruption:**
+- Change direction mid-task
+- Add new requirements
+- Focus on specific aspect (security, performance, etc.)
+- Provide clarification
+- Stop unwanted behavior
 
 ## Common Commands
 

@@ -195,8 +195,8 @@ Communication: 'Tell worker: [instruction]', 'DONE' when complete."
 
 ## Conversation Flow
 
-1. User provides a task
-2. Instructor receives task, uses thinking to analyze
+1. User provides an instruction
+2. Instructor receives instruction, uses thinking to analyze
 3. Instructor responds with instruction for Worker (using "Tell worker:" or entire response)
 4. Worker receives instruction and executes (writes code, edits files, etc.)
 5. Instructor receives Worker's response prefixed with "Worker says: ..."
@@ -204,6 +204,26 @@ Communication: 'Tell worker: [instruction]', 'DONE' when complete."
    - Continues with next instruction
    - Says "DONE" to complete the task
 7. Repeat until task is complete or max rounds reached
+
+### Interactive Interruption
+
+During execution, you can press **ESC** to pause and give instructions:
+
+1. Press **ESC** - Both Instructor and Worker are paused
+2. Enter your instruction to the Instructor
+3. Instructor processes your instruction and continues chatting with Worker
+4. Or press Enter to resume without changes
+
+**Example:**
+```
+[Instructor thinking...]
+<Press ESC>
+⏸️  Execution paused by user (ESC pressed)
+Enter your instruction to Instructor: Focus on security - review all input validation
+
+[Instructor processes new instruction...]
+[Conversation continues with new focus...]
+```
 
 ## Message Format
 

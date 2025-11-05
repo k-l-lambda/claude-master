@@ -2,6 +2,7 @@ import { Config, InstanceType } from './types.js';
 import { InstructorManager } from './instructor.js';
 import { WorkerManager } from './worker.js';
 import { Display } from './display.js';
+import * as readline from 'readline';
 
 export class Orchestrator {
   private instructor: InstructorManager;
@@ -9,12 +10,111 @@ export class Orchestrator {
   private config: Config;
   private currentRound: number = 0;
   private userInstruction: string;
+  private paused: boolean = false;
+  private rl: readline.Interface;
 
   constructor(config: Config, userInstruction: string) {
     this.config = config;
     this.userInstruction = userInstruction;
     this.instructor = new InstructorManager(config, userInstruction);
     this.worker = new WorkerManager(config);
+
+    // Setup readline for user interruption
+    this.rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+
+    // Setup ESC key handler
+    this.setupKeyHandler();
+  }
+
+  private setupKeyHandler(): void {
+    if (process.stdin.isTTY) {
+      process.stdin.setRawMode(true);
+      process.stdin.on('data', (data) => {
+        // ESC key is 0x1B
+        if (data[0] === 0x1B && !this.paused) {
+          this.handleInterrupt();
+        }
+      });
+    }
+  }
+
+  private async handleInterrupt(): Promise<void> {
+    this.paused = true;
+
+    Display.newline();
+    Display.system('⏸️  Execution paused by user (ESC pressed)');
+    Display.newline();
+
+    // Temporarily disable raw mode for input
+    if (process.stdin.isTTY) {
+      process.stdin.setRawMode(false);
+    }
+
+    const userInput = await new Promise<string>((resolve) => {
+      this.rl.question('Enter your instruction to Instructor (or press Enter to resume): ', (answer) => {
+        resolve(answer);
+      });
+    });
+
+    // Re-enable raw mode
+    if (process.stdin.isTTY) {
+      process.stdin.setRawMode(true);
+    }
+
+    if (userInput.trim()) {
+      Display.system(`User instruction: ${userInput}`);
+      Display.newline();
+
+      // Send user instruction to Instructor
+      Display.header(InstanceType.INSTRUCTOR, 'Processing User Interruption');
+
+      let thinkingBuffer = '';
+      let textBuffer = '';
+
+      const instructorResponse = await this.instructor.processUserInput(
+        userInput,
+        (chunk) => {
+          if (thinkingBuffer === '') {
+            Display.newline();
+            Display.system('Thinking...');
+          }
+          thinkingBuffer += chunk;
+          Display.thinking(chunk);
+        },
+        (chunk) => {
+          if (thinkingBuffer && textBuffer === '') {
+            Display.newline();
+            Display.system('Response:');
+          }
+          textBuffer += chunk;
+          Display.text(InstanceType.INSTRUCTOR, chunk);
+        }
+      );
+
+      Display.newline();
+
+      // If Instructor wants to send to Worker, continue the conversation
+      if (instructorResponse.shouldContinue && instructorResponse.instruction) {
+        // This will be picked up in the main loop
+        this.paused = false;
+        return;
+      }
+    } else {
+      Display.system('Resuming execution...');
+      Display.newline();
+    }
+
+    this.paused = false;
+  }
+
+  private cleanup(): void {
+    if (process.stdin.isTTY) {
+      process.stdin.setRawMode(false);
+    }
+    this.rl.close();
   }
 
   async run(): Promise<void> {
@@ -24,6 +124,7 @@ export class Orchestrator {
     if (this.config.maxRounds) {
       Display.info(`Max Rounds: ${this.config.maxRounds}`);
     }
+    Display.info(`Press ESC to pause and give instructions`);
     Display.newline();
 
     try {
@@ -142,6 +243,8 @@ export class Orchestrator {
     } catch (error) {
       Display.error(`Orchestration failed: ${error instanceof Error ? error.message : String(error)}`);
       throw error;
+    } finally {
+      this.cleanup();
     }
   }
 
