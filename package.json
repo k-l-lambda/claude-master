@@ -1,6 +1,6 @@
 {
   "name": "@k-l-lambda/claude-master",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "type": "module",
   "description": "Dual-AI orchestration CLI that coordinates Instructor and Worker Claude instances",
   "main": "dist/index.js",
