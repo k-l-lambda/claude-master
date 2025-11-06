@@ -180,7 +180,7 @@ You can specify which model the Worker should use by including:
     // Match DONE only when it's:
     // - Formatted: **DONE**, __DONE__, _DONE_
     // - Or standalone: line starts with DONE, optionally followed by punctuation/whitespace
-    const isDone = /\*\*DONE\*\*|__DONE__|_DONE_|^\s*DONE[\s.!]*$/im.test(lastLine);
+    const isDone = /\*\*DONE\*\*|__DONE__|_DONE_|^\s*DONE[\s.!]*$/m.test(lastLine);
 
     // Extract instruction and model from "Tell worker" directive
     // Supports multiple formats:
