@@ -1,4 +1,4 @@
-# Simple Calculator
+# Blog API Backend
 
 ## Instructions
 
@@ -31,22 +31,48 @@ When the task is complete, respond with `DONE` to end the session.
 
 ## Your Task
 
-Create a simple calculator library in TypeScript following TDD approach.
+Build a backend API for a blog platform with proper production-level architecture.
 
 ### Requirements
-- Support basic operations: add, subtract, multiply, divide
-- Handle division by zero
-- Write tests first, then implement
-- All tests must pass
+
+**User Management:**
+- User registration and authentication
+- Role-based permissions (Admin, Author, Reader)
+
+**Content Management:**
+- Create, read, update, delete blog posts
+- Post states: draft, published
+- Categories and tags
+- Comments on posts
+
+**API Features:**
+- RESTful endpoints
+- Proper HTTP status codes
+- Error handling
+- Input validation
+- Pagination for lists
+
+**Technical:**
+- Persistent database
+- Security (password hashing, SQL injection prevention)
+- Comprehensive tests
+- API documentation
 
 ### Success Verification
-- Running `npm test` shows all tests passing
-- Calculator functions work correctly
-- Division by zero throws appropriate error
+- API endpoints work correctly
+- Authentication and authorization work
+- CRUD operations for posts function properly
+- Comments system works
+- Tests pass
+- Data persists correctly
 
 You decide:
-- How to organize the code
-- Test framework to use
-- Implementation details
+- Architecture pattern and project structure
+- Database choice and schema design
+- Authentication mechanism (JWT, sessions, etc.)
+- API design details
+- Testing strategy
+- Documentation format
 
 After completing the task, say **DONE**.
+

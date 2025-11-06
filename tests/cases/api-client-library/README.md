@@ -1,4 +1,4 @@
-# Web Search Tool Test
+# HTTP API Client Library
 
 ## Instructions
 
@@ -31,9 +31,28 @@ When the task is complete, respond with `DONE` to end the session.
 
 ## Your Task
 
-Please instruct the Worker to:
-1. Use the web_search tool to search for "TypeScript 5.0 new features"
-2. Use the web_search tool to search for "Node.js LTS latest version"
-3. Create a file called "research.md" summarizing the search results
+Build a reusable HTTP client library for making API requests.
 
-After the Worker completes the task, say **DONE**.
+### Requirements
+- Support basic HTTP methods (GET, POST, PUT, DELETE)
+- Handle errors gracefully
+- Include retry logic for failed requests
+- Type-safe (use TypeScript)
+- Include comprehensive tests
+- Provide usage examples
+
+### Success Verification
+- Library can be imported and used
+- Example code works correctly
+- Tests pass and cover main scenarios
+- Error cases are handled
+
+You decide:
+- Architecture and design patterns
+- How to implement retry logic
+- Error handling strategy
+- Testing approach
+- API design
+
+After completing the task, say **DONE**.
+

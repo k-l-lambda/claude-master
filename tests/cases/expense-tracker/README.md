@@ -1,4 +1,4 @@
-# Web Search Tool Test
+# Personal Expense Tracker
 
 ## Instructions
 
@@ -31,9 +31,29 @@ When the task is complete, respond with `DONE` to end the session.
 
 ## Your Task
 
-Please instruct the Worker to:
-1. Use the web_search tool to search for "TypeScript 5.0 new features"
-2. Use the web_search tool to search for "Node.js LTS latest version"
-3. Create a file called "research.md" summarizing the search results
+Build an expense tracking application with proper architecture.
 
-After the Worker completes the task, say **DONE**.
+### Requirements
+- Add/edit/delete expenses (amount, category, description, date)
+- Filter and search expenses
+- Generate spending reports (by category, by month)
+- Set and track budgets
+- Persistent data storage
+- Comprehensive tests
+
+### Success Verification
+- All CRUD operations work
+- Reports display accurate data
+- Budget tracking works correctly
+- Data persists between runs
+- Tests pass
+
+You decide:
+- Architecture pattern (layered, hexagonal, etc.)
+- Database choice and schema
+- How to organize code
+- Report format and details
+- Testing strategy
+
+After completing the task, say **DONE**.
+

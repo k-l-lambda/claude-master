@@ -1,4 +1,4 @@
-# Web Search Tool Test
+# Todo List CLI Application
 
 ## Instructions
 
@@ -31,9 +31,23 @@ When the task is complete, respond with `DONE` to end the session.
 
 ## Your Task
 
-Please instruct the Worker to:
-1. Use the web_search tool to search for "TypeScript 5.0 new features"
-2. Use the web_search tool to search for "Node.js LTS latest version"
-3. Create a file called "research.md" summarizing the search results
+Build a command-line todo list application that works.
 
-After the Worker completes the task, say **DONE**.
+### Requirements
+- Add, list, complete, and delete todo items
+- Data persists between runs
+- Include tests that verify it works
+
+### Success Verification
+- Running the commands should work as expected
+- Tests should pass
+- Code should be organized and maintainable
+
+You decide:
+- How to structure the code
+- What technology/framework to use (if any)
+- Testing approach
+- Implementation details
+
+After completing the task, say **DONE**.
+
