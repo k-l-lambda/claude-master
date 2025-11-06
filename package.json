@@ -1,5 +1,5 @@
 {
-  "name": "claude-master",
+  "name": "@k-l-lambda/claude-master",
   "version": "1.0.0",
   "type": "module",
   "description": "Dual-AI orchestration CLI that coordinates Instructor and Worker Claude instances",
@@ -28,14 +28,17 @@
     "orchestration",
     "instructor-worker"
   ],
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/claude-master.git"
+    "url": "https://github.com/k-l-lambda/claude-master.git"
   },
   "bugs": {
-    "url": "https://github.com/yourusername/claude-master/issues"
+    "url": "https://github.com/k-l-lambda/claude-master/issues"
   },
-  "homepage": "https://github.com/yourusername/claude-master#readme",
+  "homepage": "https://github.com/k-l-lambda/claude-master#readme",
   "author": "",
   "license": "ISC",
   "engines": {
