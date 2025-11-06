@@ -4,6 +4,10 @@ tsconfig.json
 *.ts
 !*.d.ts
 
+# Build scripts
+build.mjs
+*.mjs
+
 # Tests and test cases
 tests/
 test/
