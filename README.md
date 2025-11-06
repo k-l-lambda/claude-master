@@ -14,17 +14,89 @@ A dual-AI orchestration CLI that coordinates two Claude instances to complete so
 
 ## 🚀 Quick Start
 
+### Installation
+
+**Option 1: Global Installation (Recommended for regular use)**
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/claude-master.git
+cd claude-master
+
+# Install dependencies and build
+npm install
+npm run build
+
+# Install globally (creates 'claude-master' command)
+npm link
+
+# Or on Windows:
+npm install -g .
+```
+
+After installation, you can use `claude-master` from anywhere:
+```bash
+# Set up your API key
+export ANTHROPIC_AUTH_TOKEN="your-key"
+
+# Run from any directory
+cd ./my-project
+claude-master "Do this task described in README.md"
+```
+
+**Option 2: Local Development**
 ```bash
 # Install dependencies
 npm install
 npm run build
 
-# Set up your API key
-cp .env.example .env.local
-# Edit .env.local and add your ANTHROPIC_AUTH_TOKEN
+# Run locally with npm
+npm start "Do this task described in README.md" -d ./my-project
 
-# Run a simple test
-npm start "Read README.md to understand your task" -d tests/cases/simple-calculator --no-thinking
+# Or use the dev command (with auto-reload)
+npm run dev "Your task" -d ./my-project
+```
+
+### Uninstall
+
+```bash
+# Remove global installation
+npm unlink -g claude-master
+
+# Or if installed with npm install -g
+npm uninstall -g claude-master
+```
+
+### Configuration
+
+**Option 1: Environment Variable (Global)**
+```bash
+# Add to ~/.bashrc or ~/.zshrc
+export ANTHROPIC_AUTH_TOKEN="your-api-key-here"
+export ANTHROPIC_BASE_URL="https://api.anthropic.com"  # optional
+```
+
+**Option 2: .env.local File (Per Project)**
+```bash
+# In your project directory
+echo "ANTHROPIC_AUTH_TOKEN=your-key" > .env.local
+echo "ANTHROPIC_BASE_URL=https://api.anthropic.com" >> .env.local
+```
+
+**Option 3: CLI Arguments**
+```bash
+claude-master "task" -k your-key -u https://api.anthropic.com
+```
+
+### Quick Test
+
+```bash
+# Verify installation
+./verify-installation.sh
+
+# Test with the simple calculator example
+claude-master "Read README.md to understand your task" \
+  -d tests/cases/simple-calculator \
+  --no-thinking
 ```
 
 ## 📋 Key Features
@@ -96,11 +168,27 @@ User → Instructor (with task)
 
 ## 🎮 Usage
 
+### Command Format
+
+```bash
+# If installed globally
+claude-master [instruction] [options]
+
+# If running locally
+npm start [instruction] [options]
+# or
+npm run dev [instruction] [options]
+```
+
 ### Basic Pattern
 
 1. **Put task details in README.md** (recommended)
 2. **Run with initial instruction**:
 ```bash
+# Global installation
+claude-master "Read README.md to get aware your task" -d ./your-project
+
+# Local installation
 npm start "Read README.md to get aware your task" -d ./your-project
 ```
 
@@ -148,13 +236,18 @@ npm start "task" -k your-key -u https://api.anthropic.com
 ## 📝 CLI Options
 
 ```bash
+# Global installation
+claude-master <instruction> [options]
+
+# Local installation
 npm start <instruction> [options]
 ```
 
 **Arguments:**
-- `<instruction>` - Initial instruction for Instructor (can be provided later interactively)
+- `<instruction>` - Initial instruction for Instructor (optional, can be provided interactively)
 
 **Options:**
+- `-V, --version` - Output the version number
 - `-d, --work-dir <path>` - Working directory (default: current)
 - `-r, --max-rounds <number>` - Maximum conversation rounds
 - `-i, --instructor-model <model>` - Instructor model
@@ -162,11 +255,18 @@ npm start <instruction> [options]
 - `-k, --api-key <key>` - Anthropic API key
 - `-u, --base-url <url>` - API base URL
 - `--no-thinking` - Disable thinking display
+- `-h, --help` - Display help
 
 ## 🎯 Example Use Cases
 
 ### 1. Simple Calculator (TDD)
 ```bash
+# Global
+claude-master "Read README.md to understand your task" \
+  -d tests/cases/simple-calculator \
+  --no-thinking
+
+# Local
 npm start "Read README.md to understand your task" \
   -d tests/cases/simple-calculator \
   --no-thinking
@@ -174,6 +274,12 @@ npm start "Read README.md to understand your task" \
 
 ### 2. Todo List Application
 ```bash
+# Global
+claude-master "Read README.md to understand your task" \
+  -d tests/cases/easy-todo-list \
+  --no-thinking
+
+# Local
 npm start "Read README.md to understand your task" \
   -d tests/cases/easy-todo-list \
   --no-thinking
@@ -181,23 +287,32 @@ npm start "Read README.md to understand your task" \
 
 ### 3. HTTP API Client Library
 ```bash
-npm start "Read README.md to understand your task" \
+claude-master "Read README.md to understand your task" \
   -d tests/cases/api-client-library \
   --no-thinking
 ```
 
 ### 4. Expense Tracker (Advanced)
 ```bash
-npm start "Read README.md to understand your task" \
+claude-master "Read README.md to understand your task" \
   -d tests/cases/expense-tracker \
   --no-thinking
 ```
 
 ### 5. Blog CMS Backend (Complex)
 ```bash
-npm start "Read README.md to understand your task" \
+claude-master "Read README.md to understand your task" \
   -d tests/cases/blog-cms-backend \
   --no-thinking
+```
+
+### 6. Use with Any Project
+```bash
+# Navigate to your project
+cd ~/my-awesome-project
+
+# Run claude-master
+claude-master "Read README.md and help me implement the authentication system"
 ```
 
 ## 🧪 Test Cases
@@ -224,18 +339,39 @@ Color-coded for easy tracking:
 
 ## 🔧 Development
 
+### Setup for Development
 ```bash
-# Development mode with auto-reload
+# Clone and install
+git clone https://github.com/yourusername/claude-master.git
+cd claude-master
+npm install
+```
+
+### Development Commands
+```bash
+# Development mode with auto-reload (tsx)
 npm run dev "Your task" -d ./project
 
-# Build
+# Build TypeScript to JavaScript
 npm run build
 
-# Run tests
-npm test
+# Run built version
+npm start "Your task" -d ./project
 
-# Type checking
-npm run type-check
+# Link for global testing
+npm run link
+
+# Unlink global installation
+npm run unlink
+```
+
+### Publishing (for maintainers)
+```bash
+# Update version
+npm version patch  # or minor, or major
+
+# Build and publish
+npm publish
 ```
 
 ## 📚 Documentation
