@@ -18,10 +18,7 @@ test/
 
 # Documentation (except README.md which is in package.json files)
 docs/
-COMPLETION_SUMMARY.md
-API_COMPARISON.md
-CLAUDE_CODE_AUTH_INVESTIGATION.md
-DEV_SETUP.md
+CLAUDE.md
 
 # Git files
 .git/

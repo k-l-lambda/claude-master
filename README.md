@@ -14,12 +14,46 @@ A dual-AI orchestration CLI that coordinates two Claude instances to complete so
 
 ## 🚀 Quick Start
 
+> **Quick Install**: See [Quick Install Guide](docs/QUICK_INSTALL.md) for a streamlined installation from GitHub Packages.
+
 ### Installation
 
-**Option 1: Global Installation (Recommended for regular use)**
+**Option 1: Install from GitHub Packages (Recommended)**
+
+> **Note**: GitHub Packages requires authentication (one-time setup per machine). For auth-free installation, see Option 2 or consider publishing to npmjs.com.
+
+```bash
+# 1. Configure npm to use GitHub Packages for @k-l-lambda scope
+echo "@k-l-lambda:registry=https://npm.pkg.github.com" >> ~/.npmrc
+
+# 2. Authenticate with GitHub (requires a personal access token with read:packages scope)
+# Visit: https://github.com/settings/tokens/new?scopes=read:packages
+npm login --scope=@k-l-lambda --registry=https://npm.pkg.github.com
+
+# 3. Install globally
+npm install -g @k-l-lambda/claude-master
+
+# 4. Verify installation
+claude-master --version
+```
+
+> **Note**: You need a GitHub Personal Access Token (classic) with `read:packages` scope.
+> For troubleshooting, see [Installation Guide](docs/INSTALLATION.md#github-packages-authentication-issues).
+
+After installation, you can use `claude-master` from anywhere:
+```bash
+# Set up your API key
+export ANTHROPIC_AUTH_TOKEN="your-key"
+
+# Run from any directory
+cd ./my-project
+claude-master "Do this task described in README.md"
+```
+
+**Option 2: Install from Source (Development)**
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/claude-master.git
+git clone https://github.com/k-l-lambda/claude-master.git
 cd claude-master
 
 # Install dependencies and build
@@ -33,17 +67,7 @@ npm link
 npm install -g .
 ```
 
-After installation, you can use `claude-master` from anywhere:
-```bash
-# Set up your API key
-export ANTHROPIC_AUTH_TOKEN="your-key"
-
-# Run from any directory
-cd ./my-project
-claude-master "Do this task described in README.md"
-```
-
-**Option 2: Local Development**
+**Option 3: Local Development**
 ```bash
 # Install dependencies
 npm install
@@ -59,11 +83,11 @@ npm run dev "Your task" -d ./my-project
 ### Uninstall
 
 ```bash
-# Remove global installation
-npm unlink -g claude-master
+# If installed from GitHub Packages
+npm uninstall -g @k-l-lambda/claude-master
 
-# Or if installed with npm install -g
-npm uninstall -g claude-master
+# If installed from source with npm link
+npm unlink -g claude-master
 ```
 
 ### Configuration
