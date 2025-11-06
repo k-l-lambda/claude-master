@@ -1,4 +1,4 @@
-# Todo List CLI Application
+# Life Game
 
 ## Instructions
 
@@ -27,8 +27,8 @@ When you want the Worker to do something, use the format:
 - `Tell worker (model: haiku): [instruction]` - Alternative format
 
 Available models for Worker:
-- **sonnet** (default) - Balanced capability and speed, good for most tasks
-- **haiku** - Fastest, for simple/quick tasks
+- **sonnet** - Balanced capability and speed, good for most tasks
+- **haiku** (default) - Fastest, for simple/quick tasks
 
 When the task is complete, respond with `DONE` to end the session.
 
@@ -36,23 +36,6 @@ When the task is complete, respond with `DONE` to end the session.
 
 ## Your Task
 
-Build a command-line todo list application that works.
+Create a Conway's Game of Life running in terminal.
 
-### Requirements
-- Add, list, complete, and delete todo items
-- Data persists between runs
-- Include tests that verify it works
-
-### Success Verification
-- Running the commands should work as expected
-- Tests should pass
-- Code should be organized and maintainable
-
-You decide:
-- How to structure the code
-- What technology/framework to use (if any)
-- Testing approach
-- Implementation details
-
-After completing the task, say **DONE**.
-
+Initial with a randomized state or from a config file, give a proper default world size.
