@@ -30,7 +30,7 @@ export class InstructorManager {
       this.config.instructorModel,
       this.systemPrompt,
       instructorTools,
-      true, // Use thinking
+      this.config.useThinking ?? false, // Use thinking only if enabled in config
       (chunk, type) => {
         if (type === 'thinking' && onThinkingChunk) {
           onThinkingChunk(chunk);
@@ -54,7 +54,9 @@ export class InstructorManager {
 
     this.conversationHistory.push({
       role: 'assistant',
-      content: response.content,
+      content: response.content.filter(
+        block => block.type === 'text' || block.type === 'thinking'
+      ),
     });
 
     return this.parseInstructorResponse(fullText, thinking);
@@ -75,7 +77,7 @@ export class InstructorManager {
       this.config.instructorModel,
       this.systemPrompt,
       instructorTools,
-      true, // Use thinking
+      this.config.useThinking ?? false, // Use thinking only if enabled in config
       (chunk, type) => {
         if (type === 'thinking' && onThinkingChunk) {
           onThinkingChunk(chunk);
@@ -99,7 +101,9 @@ export class InstructorManager {
 
     this.conversationHistory.push({
       role: 'assistant',
-      content: response.content,
+      content: response.content.filter(
+        block => block.type === 'text' || block.type === 'thinking'
+      ),
     });
 
     return this.parseInstructorResponse(fullText, thinking);

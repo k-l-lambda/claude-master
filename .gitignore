@@ -3,5 +3,5 @@
 node_modules
 dist
 
-tests/*/*
-!tests/**/README*
+tests/cases/*/*
+!tests/cases/**/README*

@@ -27,6 +27,7 @@ program
   .option('-w, --worker-model <model>', 'Default model for Worker', 'claude-sonnet-4-5-20250929')
   .option('-k, --api-key <key>', 'Anthropic API key (or use ANTHROPIC_AUTH_TOKEN env var or .env.local)')
   .option('-u, --base-url <url>', 'API base URL (or use ANTHROPIC_BASE_URL env var or .env.local)')
+  .option('--no-thinking', 'Disable thinking feature for Instructor (use this if your API/proxy does not support thinking)')
   .action(async (instruction, options) => {
     try {
       // Change to work directory if specified
@@ -39,8 +40,8 @@ program
       process.chdir(workDir);
       Display.info(`Working directory: ${workDir}`);
 
-      // Get auth token from environment
-      const authToken = process.env.ANTHROPIC_AUTH_TOKEN || '';
+      // Get auth token from environment (use undefined instead of empty string)
+      const authToken = process.env.ANTHROPIC_AUTH_TOKEN || undefined;
 
       // Get API key from options or environment
       const apiKey = options.apiKey
@@ -64,6 +65,7 @@ program
         instructorModel: options.instructorModel,
         workerModel: options.workerModel,
         maxRounds: options.maxRounds,
+        useThinking: options.thinking !== false, // Default to true, but can be disabled with --no-thinking
       };
 
       // Create and run orchestrator

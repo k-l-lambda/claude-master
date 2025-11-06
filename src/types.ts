@@ -7,6 +7,7 @@ export interface Config {
   instructorModel: string;
   workerModel: string;
   maxRounds?: number;
+  useThinking?: boolean;  // Control whether to use thinking feature
 }
 
 export interface Message {
