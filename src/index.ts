@@ -5,8 +5,15 @@ import { Command } from 'commander';
 import { Orchestrator } from './orchestrator.js';
 import { Config } from './types.js';
 import { Display } from './display.js';
-import { existsSync } from 'fs';
-import { resolve } from 'path';
+import { existsSync, readFileSync } from 'fs';
+import { resolve, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+// Get version from package.json
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const packageJson = JSON.parse(readFileSync(resolve(__dirname, '../package.json'), 'utf-8'));
+const version = packageJson.version;
 
 // Load .env.local file if it exists
 const envLocalPath = resolve(process.cwd(), '.env.local');
@@ -19,7 +26,7 @@ const program = new Command();
 program
   .name('claude-master')
   .description('CLI tool to orchestrate Instructor and Worker Claude instances')
-  .version('1.0.0')
+  .version(version)
   .argument('[instruction]', 'Optional initial instruction for Instructor (can be provided later interactively)')
   .option('-d, --work-dir <path>', 'Working directory for the project', process.cwd())
   .option('-r, --max-rounds <number>', 'Maximum number of conversation rounds', parseInt)
