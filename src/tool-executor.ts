@@ -50,6 +50,9 @@ export class ToolExecutor {
         case 'bash_command':
           result = await this.bashCommand(toolUse.input);
           break;
+        case 'web_search':
+          result = await this.webSearch(toolUse.input);
+          break;
         default:
           throw new Error(`Unknown tool: ${toolUse.name}`);
       }
@@ -229,5 +232,113 @@ export class ToolExecutor {
     } catch (error: any) {
       throw new Error(`Bash command failed: ${error.message}`);
     }
+  }
+
+  private async webSearch(input: any): Promise<string> {
+    const query = input.query;
+    const maxResults = input.max_results || 5;
+
+    if (!query) {
+      throw new Error('Missing required parameter: query');
+    }
+
+    try {
+      // Use curl to search via DuckDuckGo Lite (text-only version)
+      const searchUrl = `https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(query)}`;
+
+      // Check for proxy settings
+      const httpProxy = process.env.http_proxy || process.env.HTTP_PROXY || '';
+      const httpsProxy = process.env.https_proxy || process.env.HTTPS_PROXY || '';
+      const proxy = httpsProxy || httpProxy;
+
+      // Use curl with timeout and proxy if available
+      let curlCommand = `curl -s -m 10 -A "Mozilla/5.0"`;
+      if (proxy) {
+        curlCommand += ` --proxy "${proxy}"`;
+      }
+      curlCommand += ` "${searchUrl}"`;
+
+      const html = execSync(curlCommand, {
+        encoding: 'utf-8',
+        maxBuffer: 10 * 1024 * 1024,
+      });
+
+      if (!html) {
+        return `No search results found for: ${query}`;
+      }
+
+      // Parse the HTML to extract results
+      const results = this.parseSearchResults(html, maxResults);
+
+      if (results.length === 0) {
+        return `No search results found for: ${query}`;
+      }
+
+      const formattedResults = results.map((r, idx) =>
+        `${idx + 1}. ${r.title}\n   ${r.url}\n   ${r.snippet || '(no snippet)'}`
+      ).join('\n\n');
+
+      return `Search results for "${query}":\n\n${formattedResults}`;
+    } catch (error: any) {
+      throw new Error(`Web search failed: ${error.message}`);
+    }
+  }
+
+  private parseSearchResults(html: string, maxResults: number): Array<{title: string, url: string, snippet: string}> {
+    const results: Array<{title: string, url: string, snippet: string}> = [];
+
+    // DuckDuckGo Lite uses simple table structure
+    // Extract results using simpler patterns
+    const linkRegex = /<a[^>]*href="([^"]*)"[^>]*class="result-link"[^>]*>([^<]*)<\/a>/g;
+    const snippetRegex = /<td[^>]*class="result-snippet"[^>]*>([^<]*)<\/td>/g;
+
+    const links: Array<{url: string, title: string}> = [];
+    let match;
+
+    // Extract all links
+    while ((match = linkRegex.exec(html)) !== null) {
+      const url = this.decodeHtml(match[1]);
+      const title = this.stripHtml(match[2]);
+      links.push({ url, title });
+    }
+
+    // Extract all snippets
+    const snippets: string[] = [];
+    while ((match = snippetRegex.exec(html)) !== null) {
+      const snippet = this.stripHtml(match[1]);
+      snippets.push(snippet);
+    }
+
+    // Combine links and snippets
+    for (let i = 0; i < Math.min(links.length, maxResults); i++) {
+      results.push({
+        title: links[i].title || 'No title',
+        url: links[i].url,
+        snippet: snippets[i] || ''
+      });
+    }
+
+    return results;
+  }
+
+  private stripHtml(html: string): string {
+    return html
+      .replace(/<[^>]*>/g, '')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .trim();
+  }
+
+  private decodeHtml(text: string): string {
+    return text
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'");
   }
 }

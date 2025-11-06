@@ -242,4 +242,22 @@ export const workerTools: Tool[] = [
       required: ['command'],
     },
   },
+  {
+    name: 'web_search',
+    description: 'Search the web for information using a search engine',
+    input_schema: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description: 'Search query string',
+        },
+        max_results: {
+          type: 'number',
+          description: 'Maximum number of results to return (default: 5)',
+        },
+      },
+      required: ['query'],
+    },
+  },
 ];
