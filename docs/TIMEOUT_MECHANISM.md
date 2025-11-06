@@ -17,10 +17,45 @@ The system implements a 60-second inactivity timeout for Worker responses. If th
 2. **Orchestrator tracks** the timestamp of the last received token
 3. **Every second**, orchestrator checks: `(current_time - last_token_time) > 60s`
 4. **If timeout detected**:
+   - Print detailed timeout information to console (console.error)
    - Abort the Worker's streaming request
    - Display warning message to user
    - Collect any partial response from Worker
    - Forward timeout message to Instructor
+
+### Timeout Console Output
+
+When timeout is detected, the system prints detailed information to console:
+
+```
+[TIMEOUT DETECTED]
+Worker inactive for 60s (threshold: 60s)
+Last token received at: 2025-11-06T12:31:59.447Z
+Timeout triggered at: 2025-11-06T12:32:59.448Z
+Aborting Worker stream...
+```
+
+This provides:
+- **Inactivity duration**: How long Worker has been inactive
+- **Last token timestamp**: When the last token was received (ISO format)
+- **Timeout trigger timestamp**: When timeout was triggered (ISO format)
+- **Abort notification**: Confirmation that stream is being aborted
+
+### User-Facing Display
+
+After console output, user sees friendly display:
+
+```
+⚠  Worker response timed out (no activity for 60 seconds)
+
+│ Partial response received: 35 characters
+│ Timeout occurred at: 8:32:59 PM
+```
+
+This shows:
+- Warning emoji and message
+- Character count of partial response (if any)
+- Local time of timeout occurrence
 
 ### Message Format to Instructor
 
@@ -56,6 +91,14 @@ const timeoutCheckInterval = setInterval(() => {
   const timeSinceLastToken = Date.now() - lastTokenTime;
   if (timeSinceLastToken > TIMEOUT_MS) {
     workerTimedOut = true;
+
+    // Print timeout detection to console
+    console.error('\n[TIMEOUT DETECTED]');
+    console.error(`Worker inactive for ${Math.floor(timeSinceLastToken / 1000)}s (threshold: ${TIMEOUT_MS / 1000}s)`);
+    console.error(`Last token received at: ${new Date(lastTokenTime).toISOString()}`);
+    console.error(`Timeout triggered at: ${new Date().toISOString()}`);
+    console.error('Aborting Worker stream...\n');
+
     if (this.currentAbortController) {
       this.currentAbortController.abort(); // Cancel the stream
     }
@@ -71,6 +114,20 @@ const timeoutCheckInterval = setInterval(() => {
 
 // In catch block
 if (workerTimedOut && error.name === 'AbortError') {
+  Display.newline();
+  Display.warning('⏱️  Worker response timed out (no activity for 60 seconds)');
+
+  // Print detailed timeout info
+  const partialLength = workerTextBuffer.length;
+  if (partialLength > 0) {
+    Display.system(`   Partial response received: ${partialLength} characters`);
+  } else {
+    Display.system('   No response received before timeout');
+  }
+  Display.system(`   Timeout occurred at: ${new Date().toLocaleTimeString()}`);
+
+  Display.newline();
+
   // Pass timeout message to Instructor
   // Note: processWorkerResponse will add "Worker says:" prefix
   const timeoutMessage = workerTextBuffer
@@ -88,10 +145,12 @@ if (workerTimedOut && error.name === 'AbortError') {
 3. **Graceful**: Captures partial response before aborting
 4. **Informative**: Tells Instructor what happened and what was received
 5. **Clean**: Always clears interval in both success and error paths
+6. **Detailed Logging**: Prints comprehensive timeout information to console for debugging
+7. **Dual Output**: Both technical (console.error) and user-friendly (Display) messages
 
 ## Example Scenarios
 
-### Scenario 1: Worker Gets Stuck
+### Scenario 1: Worker Gets Stuck (with Console Output)
 
 ```
 Instructor: "Tell worker: Run a complex analysis on all files"
@@ -100,7 +159,18 @@ Worker: [Starts streaming]
   "I'll analyze the files. Let me start with..."
   [60 seconds pass with no new tokens]
 
-System: ⏱️ Worker response timed out (no activity for 60 seconds)
+Console (stderr):
+  [TIMEOUT DETECTED]
+  Worker inactive for 60s (threshold: 60s)
+  Last token received at: 2025-11-06T12:31:59.447Z
+  Timeout triggered at: 2025-11-06T12:32:59.448Z
+  Aborting Worker stream...
+
+System Display:
+  ⏱️ Worker response timed out (no activity for 60 seconds)
+
+  │ Partial response received: 47 characters
+  │ Timeout occurred at: 8:32:59 PM
 
 Instructor receives:
   "Worker says: I'll analyze the files. Let me start with...
@@ -136,7 +206,18 @@ Instructor: "Tell worker: Execute long operation"
 Worker: [Starts streaming but produces no tokens]
   [60 seconds pass]
 
-System: ⏱️ Worker response timed out (no activity for 60 seconds)
+Console (stderr):
+  [TIMEOUT DETECTED]
+  Worker inactive for 60s (threshold: 60s)
+  Last token received at: 2025-11-06T12:31:59.447Z
+  Timeout triggered at: 2025-11-06T12:32:59.448Z
+  Aborting Worker stream...
+
+System Display:
+  ⏱️ Worker response timed out (no activity for 60 seconds)
+
+  │ No response received before timeout
+  │ Timeout occurred at: 8:32:59 PM
 
 Instructor receives:
   "Worker says: [No response received - TIMEOUT after 60s]"
@@ -149,11 +230,14 @@ Instructor: [Decides on action]
 ## Benefits
 
 1. **Prevents Hanging**: System won't wait indefinitely for stuck Worker
-2. **User Feedback**: Clear indication that timeout occurred
+2. **User Feedback**: Clear indication that timeout occurred with timestamps
 3. **Partial Results**: Captures and forwards any partial output
 4. **Automatic Recovery**: Instructor can handle timeout and retry
 5. **Resource Management**: Frees up resources from stuck requests
-6. **Debugging Aid**: Timeout indicates potential issues with instructions or model
+6. **Debugging Aid**: Detailed console logs help identify timeout causes
+7. **Dual Output Approach**:
+   - Technical details (console.error) for debugging and logging
+   - User-friendly display for operators
 
 ## Configuration
 

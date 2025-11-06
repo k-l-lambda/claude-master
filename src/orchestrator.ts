@@ -299,6 +299,10 @@ export class Orchestrator {
             const timeSinceLastToken = Date.now() - lastTokenTime;
             if (timeSinceLastToken > TIMEOUT_MS) {
               workerTimedOut = true;
+
+              // Simple console notification
+              console.log(`[Timeout] Worker inactive for ${Math.floor(timeSinceLastToken / 1000)}s, aborting...`);
+
               if (this.currentAbortController) {
                 this.currentAbortController.abort();
               }
@@ -387,7 +391,7 @@ export class Orchestrator {
             // If aborted due to timeout
             if (workerTimedOut && (error.name === 'AbortError' || error.message?.includes('aborted'))) {
               Display.newline();
-              Display.warning('⏱️  Worker response timed out (no activity for 60 seconds)');
+              Display.system('⏱️  Worker response timed out after 60s of inactivity');
               Display.newline();
 
               // Pass timeout message to Instructor
