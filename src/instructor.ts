@@ -165,26 +165,56 @@ You can specify which model the Worker should use by including:
     const lastLine = trimmedText.split('\n').slice(-3).join('\n'); // Check last 3 lines
     const isDone = /\*\*DONE\*\*|__DONE__|_DONE_|\bDONE\b/i.test(lastLine);
 
-    // Extract instruction after "Tell worker:" (case insensitive)
-    const tellWorkerMatch = text.match(/tell\s+worker:\s*([\s\S]*)/i);
+    // Extract instruction and model from "Tell worker" directive
+    // Supports multiple formats:
+    // - "Tell worker: instruction"
+    // - "Tell worker (use sonnet): instruction"
+    // - "Tell worker (model: opus): instruction"
     let instruction = '';
-
-    if (tellWorkerMatch) {
-      // Only send text after "Tell worker:"
-      instruction = tellWorkerMatch[1].trim();
-    } else {
-      // Send entire response to Worker
-      instruction = text.trim();
-    }
-
-    // Check for model hints (optional, can be anywhere in the response)
     let workerModel = this.config.workerModel;
-    if (text.toLowerCase().includes('use opus') || text.toLowerCase().includes('model: opus')) {
-      workerModel = 'claude-opus-4-1-20250805';
-    } else if (text.toLowerCase().includes('use haiku') || text.toLowerCase().includes('model: haiku')) {
-      workerModel = 'claude-3-5-haiku-20241022';
-    } else if (text.toLowerCase().includes('use sonnet') || text.toLowerCase().includes('model: sonnet')) {
-      workerModel = 'claude-sonnet-4-5-20250929';
+
+    // Try to match "Tell worker" with optional model specification in parentheses
+    const tellWorkerWithModelMatch = text.match(/tell\s+worker\s*\((?:use\s+)?(?:model:\s*)?(\w+)\)\s*:\s*([\s\S]*)/i);
+    const tellWorkerSimpleMatch = text.match(/tell\s+worker:\s*([\s\S]*)/i);
+
+    if (tellWorkerWithModelMatch) {
+      // Format: "Tell worker (use sonnet): instruction" or "Tell worker (model: opus): instruction"
+      const modelName = tellWorkerWithModelMatch[1].toLowerCase();
+      instruction = tellWorkerWithModelMatch[2].trim();
+
+      // Map model name to full model ID
+      if (modelName === 'opus') {
+        workerModel = 'claude-opus-4-1-20250805';
+      } else if (modelName === 'haiku') {
+        workerModel = 'claude-3-5-haiku-20241022';
+      } else if (modelName === 'sonnet') {
+        workerModel = 'claude-sonnet-4-5-20250929';
+      }
+    } else if (tellWorkerSimpleMatch) {
+      // Format: "Tell worker: instruction"
+      instruction = tellWorkerSimpleMatch[1].trim();
+
+      // Check for model hints in the instruction text itself
+      // Look for patterns like "use sonnet", "model: opus", etc.
+      if (instruction.toLowerCase().includes('use opus') || instruction.toLowerCase().includes('model: opus')) {
+        workerModel = 'claude-opus-4-1-20250805';
+      } else if (instruction.toLowerCase().includes('use haiku') || instruction.toLowerCase().includes('model: haiku')) {
+        workerModel = 'claude-3-5-haiku-20241022';
+      } else if (instruction.toLowerCase().includes('use sonnet') || instruction.toLowerCase().includes('model: sonnet')) {
+        workerModel = 'claude-sonnet-4-5-20250929';
+      }
+    } else {
+      // No "Tell worker" directive - send entire response to Worker
+      instruction = text.trim();
+
+      // Check for model hints anywhere in the text
+      if (text.toLowerCase().includes('use opus') || text.toLowerCase().includes('model: opus')) {
+        workerModel = 'claude-opus-4-1-20250805';
+      } else if (text.toLowerCase().includes('use haiku') || text.toLowerCase().includes('model: haiku')) {
+        workerModel = 'claude-3-5-haiku-20241022';
+      } else if (text.toLowerCase().includes('use sonnet') || text.toLowerCase().includes('model: sonnet')) {
+        workerModel = 'claude-sonnet-4-5-20250929';
+      }
     }
 
     // Continue if not done and there's an instruction
