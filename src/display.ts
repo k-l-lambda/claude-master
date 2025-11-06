@@ -42,6 +42,10 @@ export class Display {
     console.error('\n' + chalk.red.bold('ERROR: ') + chalk.red(message));
   }
 
+  static warning(message: string): void {
+    console.log('\n' + chalk.yellow.bold('⚠ ') + chalk.yellow(message));
+  }
+
   static success(message: string): void {
     console.log('\n' + chalk.green.bold('✓ ') + chalk.green(message));
   }

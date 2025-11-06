@@ -25,6 +25,7 @@ export interface InstructorResponse {
   instruction: string;
   workerModel?: string;
   shouldContinue: boolean;
+  needsCorrection?: boolean;  // True if Instructor needs to be prompted about correct communication
 }
 
 export enum InstanceType {

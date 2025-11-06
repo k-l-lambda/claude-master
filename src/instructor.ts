@@ -208,27 +208,29 @@ You can specify which model the Worker should use by including:
         workerModel = 'claude-sonnet-4-5-20250929';
       }
     } else {
-      // No "Tell worker" directive - send entire response to Worker
-      instruction = text.trim();
-
-      // Check for model hints anywhere in the text
-      if (text.toLowerCase().includes('use opus') || text.toLowerCase().includes('model: opus')) {
-        workerModel = 'claude-opus-4-1-20250805';
-      } else if (text.toLowerCase().includes('use haiku') || text.toLowerCase().includes('model: haiku')) {
-        workerModel = 'claude-3-5-haiku-20241022';
-      } else if (text.toLowerCase().includes('use sonnet') || text.toLowerCase().includes('model: sonnet')) {
-        workerModel = 'claude-sonnet-4-5-20250929';
+      // No "Tell worker" directive found
+      if (!isDone) {
+        // Instructor didn't say "tell worker" and didn't say "DONE"
+        // This means the instruction is incomplete
+        instruction = ''; // Don't send to worker
+      } else {
+        // DONE was said, so we're finished
+        instruction = '';
       }
     }
 
     // Continue if not done and there's an instruction
     const shouldContinue = !isDone && instruction.length > 0;
 
+    // If no instruction and not done, it means we need to prompt Instructor to continue
+    const needsCorrection = !isDone && instruction.length === 0 && text.trim().length > 0;
+
     return {
       thinking,
       instruction,
       workerModel,
       shouldContinue,
+      needsCorrection,
     };
   }
 

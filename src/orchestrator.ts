@@ -193,6 +193,70 @@ export class Orchestrator {
             continue;
           }
 
+          // If Instructor needs correction (didn't use "tell worker" or "DONE")
+          if (instructorResponse.needsCorrection) {
+            Display.warning('⚠️  Instructor did not use the correct communication format.');
+            Display.system('   To communicate with Worker, use: "Tell worker: [instruction]"');
+            Display.system('   To finish the task, respond with: "DONE"');
+            Display.newline();
+
+            // Prompt Instructor to continue with correction
+            this.currentRound++;
+            Display.round(this.currentRound, this.config.maxRounds);
+            Display.header(InstanceType.INSTRUCTOR, 'Please provide instruction or DONE');
+
+            let thinkingBuffer = '';
+            let textBuffer = '';
+
+            this.currentAbortController = new AbortController();
+
+            try {
+              instructorResponse = await this.instructor.processUserInput(
+                'Please continue. Remember to use "Tell worker: [instruction]" to instruct the Worker, or "DONE" to finish.',
+                (chunk) => {
+                  if (this.interrupted) return;
+                  if (thinkingBuffer === '') {
+                    Display.newline();
+                    Display.system('Thinking...');
+                  }
+                  thinkingBuffer += chunk;
+                  Display.thinking(chunk);
+                },
+                (chunk) => {
+                  if (this.interrupted) return;
+                  if (thinkingBuffer && textBuffer === '') {
+                    Display.newline();
+                    Display.system('Response:');
+                  }
+                  textBuffer += chunk;
+                  Display.text(InstanceType.INSTRUCTOR, chunk);
+                },
+                this.currentAbortController.signal
+              );
+            } catch (error: any) {
+              if (error.name === 'AbortError' || error.message?.includes('aborted')) {
+                // Interruption already handled
+              } else {
+                throw error;
+              }
+            } finally {
+              this.currentAbortController = null;
+            }
+
+            Display.newline();
+
+            // If interrupted after correction prompt, break out
+            if (this.interrupted) {
+              this.paused = false;
+              continue;
+            }
+
+            // After correction, re-check if we should continue
+            if (!instructorResponse.shouldContinue) {
+              continue;
+            }
+          }
+
           // If Instructor doesn't want to continue, loop back to wait for next user input
           if (!instructorResponse.shouldContinue) {
             continue;
