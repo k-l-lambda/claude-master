@@ -289,12 +289,30 @@ export class Orchestrator {
           // Create AbortController for this streaming operation
           this.currentAbortController = new AbortController();
 
+          // Timeout detection: track last token time
+          let lastTokenTime = Date.now();
+          const TIMEOUT_MS = 60000; // 60 seconds
+          let workerTimedOut = false;
+
+          // Start timeout check interval
+          const timeoutCheckInterval = setInterval(() => {
+            const timeSinceLastToken = Date.now() - lastTokenTime;
+            if (timeSinceLastToken > TIMEOUT_MS) {
+              workerTimedOut = true;
+              if (this.currentAbortController) {
+                this.currentAbortController.abort();
+              }
+              clearInterval(timeoutCheckInterval);
+            }
+          }, 1000); // Check every second
+
           try {
             const workerResponse = await this.worker.processInstruction(
               instructorResponse.instruction,
               currentWorkerModel,
               (chunk) => {
                 if (this.interrupted) return; // Stop processing if interrupted
+                lastTokenTime = Date.now(); // Update last token time
                 if (workerTextBuffer === '') {
                   Display.system('Response:');
                 }
@@ -303,6 +321,9 @@ export class Orchestrator {
               },
               this.currentAbortController.signal
             );
+
+            // Clear the timeout interval
+            clearInterval(timeoutCheckInterval);
 
             Display.newline();
 
@@ -360,8 +381,61 @@ export class Orchestrator {
             currentWorkerModel = nextInstructorResponse.workerModel || this.config.workerModel;
             continueConversation = nextInstructorResponse.shouldContinue;
           } catch (error: any) {
-            // If aborted, treat it as an interruption
-            if (error.name === 'AbortError' || error.message?.includes('aborted')) {
+            // Clear the timeout interval
+            clearInterval(timeoutCheckInterval);
+
+            // If aborted due to timeout
+            if (workerTimedOut && (error.name === 'AbortError' || error.message?.includes('aborted'))) {
+              Display.newline();
+              Display.warning('⏱️  Worker response timed out (no activity for 60 seconds)');
+              Display.newline();
+
+              // Pass timeout message to Instructor
+              // Note: processWorkerResponse will prepend "Worker says:" automatically
+              const timeoutMessage = workerTextBuffer
+                ? `${workerTextBuffer} [TIMEOUT after 60s]`
+                : '[No response received - TIMEOUT after 60s]';
+
+              this.currentRound++;
+              Display.round(this.currentRound, this.config.maxRounds);
+              Display.header(InstanceType.INSTRUCTOR, 'Reviewing Timeout Response');
+
+              let thinkingBuffer = '';
+              let textBuffer = '';
+
+              this.currentAbortController = new AbortController();
+
+              const nextInstructorResponse = await this.instructor.processWorkerResponse(
+                timeoutMessage,
+                (chunk) => {
+                  if (this.interrupted) return;
+                  if (thinkingBuffer === '') {
+                    Display.newline();
+                    Display.system('Thinking...');
+                  }
+                  thinkingBuffer += chunk;
+                  Display.thinking(chunk);
+                },
+                (chunk) => {
+                  if (this.interrupted) return;
+                  if (thinkingBuffer && textBuffer === '') {
+                    Display.newline();
+                    Display.system('Response:');
+                  }
+                  textBuffer += chunk;
+                  Display.text(InstanceType.INSTRUCTOR, chunk);
+                },
+                this.currentAbortController.signal
+              );
+
+              Display.newline();
+
+              instructorResponse = nextInstructorResponse;
+              currentWorkerModel = nextInstructorResponse.workerModel || this.config.workerModel;
+              continueConversation = nextInstructorResponse.shouldContinue;
+            }
+            // If aborted by user interruption
+            else if (error.name === 'AbortError' || error.message?.includes('aborted')) {
               this.paused = false;
               instructorResponse.shouldContinue = false;
               break;

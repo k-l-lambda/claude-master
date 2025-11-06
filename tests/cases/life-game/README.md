@@ -28,7 +28,7 @@ When you want the Worker to do something, use the format:
 
 Available models for Worker:
 - **sonnet** - Balanced capability and speed, good for most tasks
-- **haiku** (default) - Fastest, for simple/quick tasks
+- **haiku** (recommend) - Fastest, for simple/quick tasks
 
 When the task is complete, respond with `DONE` to end the session.
 
@@ -37,5 +37,6 @@ When the task is complete, respond with `DONE` to end the session.
 ## Your Task
 
 Create a Conway's Game of Life running in terminal.
+The game rendering in terminal should hold the cursor position, no scrolling.
 
 Initial with a randomized state or from a config file, give a proper default world size.
