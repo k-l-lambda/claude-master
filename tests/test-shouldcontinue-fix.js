@@ -20,22 +20,22 @@ function testShouldContinue(text, hasTellWorker, hasDone, description) {
 
   const needsCorrection = !isDone && instruction.length === 0 && text.trim().length > 0;
 
-  // OLD LOGIC (BUGGY)
-  const shouldContinue_OLD = !isDone && instruction.length > 0;
+  // CORRECT LOGIC (needsCorrection and shouldContinue are separate concerns)
+  const shouldContinue = !isDone && instruction.length > 0;
 
-  // NEW LOGIC (FIXED)
-  const shouldContinue_NEW = (!isDone && instruction.length > 0) || needsCorrection;
+  const expectedContinue = hasTellWorker && !hasDone;
+  const expectedCorrection = !hasTellWorker && !hasDone && text.trim().length > 0;
 
-  const status = shouldContinue_NEW === true ? '✅ CORRECT' : '❌ WRONG';
-  console.log(`${status}: ${description}`);
-  console.log(`  Text: "${text.substring(0, 50)}..."`);
+  const continueCorrect = shouldContinue === expectedContinue ? '✅' : '❌';
+  const correctionCorrect = needsCorrection === expectedCorrection ? '✅' : '❌';
+
+  console.log(`${continueCorrect}${correctionCorrect} ${description}`);
   console.log(`  Has "tell worker": ${hasTellWorker}, Has DONE: ${hasDone}`);
-  console.log(`  needsCorrection: ${needsCorrection}`);
-  console.log(`  shouldContinue (OLD): ${shouldContinue_OLD}`);
-  console.log(`  shouldContinue (NEW): ${shouldContinue_NEW}`);
+  console.log(`  needsCorrection: ${needsCorrection} (expected: ${expectedCorrection})`);
+  console.log(`  shouldContinue: ${shouldContinue} (expected: ${expectedContinue})`);
 
-  if (shouldContinue_OLD !== shouldContinue_NEW) {
-    console.log(`  🔧 FIXED: Changed from ${shouldContinue_OLD} to ${shouldContinue_NEW}`);
+  if (needsCorrection && shouldContinue) {
+    console.log(`  ⚠️  WARNING: Both needsCorrection and shouldContinue are true - semantic conflict!`);
   }
   console.log();
 }
@@ -100,10 +100,18 @@ testShouldContinue(
 );
 
 console.log('=== Summary ===');
-console.log('The bug was in instructor.ts line 237:');
-console.log('  OLD: const shouldContinue = !isDone && instruction.length > 0;');
-console.log('  NEW: const shouldContinue = (!isDone && instruction.length > 0) || needsCorrection;');
-console.log('\nThe fix ensures that when Instructor needs correction (no "tell worker", no DONE),');
-console.log('shouldContinue stays TRUE so the orchestrator can prompt for correction.');
-console.log('This prevents premature termination like "✓ Instructor has completed the current task"');
-console.log('when Instructor actually hasn\'t finished.');
+console.log('Corrected logic in instructor.ts:');
+console.log('  const shouldContinue = !isDone && instruction.length > 0;');
+console.log('');
+console.log('Key insight:');
+console.log('  - needsCorrection and shouldContinue are SEPARATE concerns');
+console.log('  - needsCorrection = true means "need to prompt for correction"');
+console.log('  - shouldContinue = false means "don\'t continue to Worker, handle correction first"');
+console.log('  - Orchestrator checks needsCorrection BEFORE shouldContinue');
+console.log('  - After correction, orchestrator gets NEW shouldContinue value');
+console.log('');
+console.log('Why they should NOT both be true:');
+console.log('  - Semantic conflict: can\'t "continue" AND "need correction" at same time');
+console.log('  - Clear separation: correction flow vs. normal flow');
+console.log('  - Orchestrator handles each independently');
+
