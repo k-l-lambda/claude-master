@@ -57,4 +57,17 @@ export class Display {
   static newline(): void {
     console.log();
   }
+
+  static truncate(text: string, maxLength: number = 300): string {
+    if (text.length <= maxLength) {
+      return text;
+    }
+
+    const headLength = Math.floor(maxLength * 0.4);
+    const tailLength = Math.floor(maxLength * 0.4);
+    const head = text.substring(0, headLength);
+    const tail = text.substring(text.length - tailLength);
+
+    return `${head}\n... [${text.length - headLength - tailLength} characters omitted] ...\n${tail}`;
+  }
 }

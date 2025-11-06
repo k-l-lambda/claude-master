@@ -235,7 +235,7 @@ export class Orchestrator {
           // Worker processes instruction
           Display.header(InstanceType.WORKER, `Processing Instruction (Model: ${currentWorkerModel})`);
           Display.system('Instruction from Instructor:');
-          Display.system(instructorResponse.instruction);
+          Display.system(Display.truncate(instructorResponse.instruction));
           Display.newline();
 
           let workerTextBuffer = '';

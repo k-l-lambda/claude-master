@@ -2,7 +2,31 @@
 
 ## 功能说明
 
-系统现在支持**持续会话模式**，当 Instructor 完成一个任务后（响应 "DONE"），不会退出程序，而是等待用户输入下一个指令，形成连续的对话循环。
+系统现在支持**持续会话模式**，当 Instructor 完成一个任务后（响应包含 "DONE"），不会退出程序，而是等待用户输入下一个指令，形成连续的对话循环。
+
+## DONE 检测
+
+Instructor 可以使用多种格式表示任务完成：
+
+- `DONE` - 纯文本
+- `**DONE**` - Markdown 粗体
+- `_DONE_` - Markdown 斜体
+- `__DONE__` - Markdown 粗体（下划线）
+
+检测规则：
+- 在响应的**最后 3 行**中查找 DONE 标记
+- 不区分大小写（done、Done、DONE 都可以）
+- 允许 DONE 后面有其他文字和标点符号
+- DONE 可以在句子中间（但必须在最后几行）
+
+示例：
+```
+✓ All tests passed! **DONE**
+✓ The implementation is complete. DONE
+✓ Task finished successfully.
+
+  DONE
+```
 
 ## 使用方式
 

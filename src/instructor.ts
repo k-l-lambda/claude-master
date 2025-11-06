@@ -158,8 +158,12 @@ You can specify which model the Worker should use by including:
   }
 
   private parseInstructorResponse(text: string, thinking: string): InstructorResponse {
-    // Check if Instructor is done - must be standalone "DONE" or at end of sentence
-    const isDone = /\bDONE\b\s*$/i.test(text.trim()) || text.trim().toUpperCase() === 'DONE';
+    // Check if Instructor is done - look for DONE in the last part of the response
+    // Allow for markdown formatting like **DONE**, _DONE_, or plain DONE
+    // Allow some punctuation and whitespace after DONE
+    const trimmedText = text.trim();
+    const lastLine = trimmedText.split('\n').slice(-3).join('\n'); // Check last 3 lines
+    const isDone = /\*\*DONE\*\*|__DONE__|_DONE_|\bDONE\b/i.test(lastLine);
 
     // Extract instruction after "Tell worker:" (case insensitive)
     const tellWorkerMatch = text.match(/tell\s+worker:\s*([\s\S]*)/i);
