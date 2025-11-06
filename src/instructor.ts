@@ -233,11 +233,13 @@ You can specify which model the Worker should use by including:
       }
     }
 
-    // Continue if not done and there's an instruction
-    const shouldContinue = !isDone && instruction.length > 0;
-
     // If no instruction and not done, it means we need to prompt Instructor to continue
     const needsCorrection = !isDone && instruction.length === 0 && text.trim().length > 0;
+
+    // Continue if:
+    // 1. Not done AND has instruction (normal flow)
+    // 2. OR needs correction (will prompt Instructor to continue)
+    const shouldContinue = (!isDone && instruction.length > 0) || needsCorrection;
 
     return {
       thinking,
