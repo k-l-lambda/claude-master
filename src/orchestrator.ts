@@ -13,11 +13,11 @@ export class Orchestrator {
   private paused: boolean = false;
   private rl: readline.Interface;
 
-  constructor(config: Config, userInstruction: string) {
+  constructor(config: Config, userInstruction: string, workDir: string) {
     this.config = config;
     this.userInstruction = userInstruction;
-    this.instructor = new InstructorManager(config, userInstruction);
-    this.worker = new WorkerManager(config);
+    this.instructor = new InstructorManager(config, userInstruction, workDir);
+    this.worker = new WorkerManager(config, workDir);
 
     // Setup readline for user interruption
     this.rl = readline.createInterface({

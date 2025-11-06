@@ -114,6 +114,23 @@ export class ClaudeClient {
           if (onChunk) {
             onChunk(event.delta.text, 'text');
           }
+        } else if (event.delta.type === 'input_json_delta') {
+          // Handle tool_use input accumulation
+          if (block) {
+            block.partial_json = (block.partial_json || '') + event.delta.partial_json;
+          }
+        }
+      } else if (event.type === 'content_block_stop') {
+        // Finalize tool_use input
+        const block = contentBlocks.get(event.index);
+        if (block && block.type === 'tool_use' && block.partial_json) {
+          try {
+            block.input = JSON.parse(block.partial_json);
+            delete block.partial_json; // Clean up temporary field
+          } catch (e) {
+            console.error('[StreamMessage] Failed to parse tool input JSON:', e);
+            block.input = {};
+          }
         }
       } else if (event.type === 'message_delta') {
         if (event.delta.stop_reason) {

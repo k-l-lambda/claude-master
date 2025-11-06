@@ -69,7 +69,7 @@ program
       };
 
       // Create and run orchestrator
-      const orchestrator = new Orchestrator(config, instruction);
+      const orchestrator = new Orchestrator(config, instruction, workDir);
       await orchestrator.run();
 
       Display.newline();
