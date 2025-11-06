@@ -14,31 +14,17 @@ A dual-AI orchestration CLI that coordinates two Claude instances to complete so
 
 ## 🚀 Quick Start
 
-> **Quick Install**: See [Quick Install Guide](docs/QUICK_INSTALL.md) for a streamlined installation from GitHub Packages.
-
 ### Installation
 
-**Option 1: Install from GitHub Packages (Recommended)**
-
-> **Note**: GitHub Packages requires authentication (one-time setup per machine). For auth-free installation, see Option 2 or consider publishing to npmjs.com.
+**Option 1: Install from npm (Recommended)**
 
 ```bash
-# 1. Configure npm to use GitHub Packages for @k-l-lambda scope
-echo "@k-l-lambda:registry=https://npm.pkg.github.com" >> ~/.npmrc
-
-# 2. Authenticate with GitHub (requires a personal access token with read:packages scope)
-# Visit: https://github.com/settings/tokens/new?scopes=read:packages
-npm login --scope=@k-l-lambda --registry=https://npm.pkg.github.com
-
-# 3. Install globally
+# Install globally - no authentication required!
 npm install -g @k-l-lambda/claude-master
 
-# 4. Verify installation
+# Verify installation
 claude-master --version
 ```
-
-> **Note**: You need a GitHub Personal Access Token (classic) with `read:packages` scope.
-> For troubleshooting, see [Installation Guide](docs/INSTALLATION.md#github-packages-authentication-issues).
 
 After installation, you can use `claude-master` from anywhere:
 ```bash
@@ -83,7 +69,7 @@ npm run dev "Your task" -d ./my-project
 ### Uninstall
 
 ```bash
-# If installed from GitHub Packages
+# If installed from npm
 npm uninstall -g @k-l-lambda/claude-master
 
 # If installed from source with npm link

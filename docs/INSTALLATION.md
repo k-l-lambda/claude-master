@@ -2,28 +2,15 @@
 
 ## Quick Install
 
-### Method 1: Install from GitHub Packages (Recommended)
+### Method 1: Install from npm (Recommended)
 
-Install the published package from GitHub Packages:
+The easiest way to install - no authentication required!
 
 ```bash
-# 1. Configure npm to use GitHub Packages for @k-l-lambda scope
-echo "@k-l-lambda:registry=https://npm.pkg.github.com" >> ~/.npmrc
-
-# 2. Authenticate with GitHub
-# You need a GitHub Personal Access Token with 'read:packages' scope
-# Create one at: https://github.com/settings/tokens/new?scopes=read:packages
-
-# Login to GitHub Packages
-npm login --scope=@k-l-lambda --registry=https://npm.pkg.github.com
-# Enter your GitHub username
-# Enter your Personal Access Token as password
-# Enter your email
-
-# 3. Install the package globally
+# Install globally
 npm install -g @k-l-lambda/claude-master
 
-# 4. Verify installation
+# Verify installation
 claude-master --version
 claude-master --help
 ```
@@ -58,7 +45,7 @@ Now you can use `claude-master` from any directory!
 ### Uninstall
 
 ```bash
-# If installed from GitHub Packages
+# If installed from npm
 npm uninstall -g @k-l-lambda/claude-master
 
 # If installed from source with npm link
@@ -141,35 +128,6 @@ npm start "Your task"
 
 ## Troubleshooting
 
-### GitHub Packages Authentication Issues
-
-If you get errors when installing from GitHub Packages:
-
-**Error: 404 Not Found**
-```bash
-# Make sure you're authenticated
-npm login --scope=@k-l-lambda --registry=https://npm.pkg.github.com
-
-# Verify your .npmrc contains the correct registry
-cat ~/.npmrc | grep @k-l-lambda
-# Should show: @k-l-lambda:registry=https://npm.pkg.github.com
-```
-
-**Error: 401 Unauthorized**
-```bash
-# Your token may have expired or lacks the 'read:packages' scope
-# Generate a new token at: https://github.com/settings/tokens/new?scopes=read:packages
-# Then login again
-npm login --scope=@k-l-lambda --registry=https://npm.pkg.github.com
-```
-
-**Error: Unable to authenticate**
-```bash
-# Check if you're using a Personal Access Token (classic)
-# Not a fine-grained token - GitHub Packages requires classic tokens
-# Create at: https://github.com/settings/tokens/new?scopes=read:packages
-```
-
 ### Command Not Found
 
 If `claude-master` is not found after installation:
@@ -244,7 +202,7 @@ cat .env.local
 
 To update to the latest version:
 
-**If installed from GitHub Packages:**
+**If installed from npm:**
 ```bash
 npm update -g @k-l-lambda/claude-master
 
@@ -268,7 +226,7 @@ npm run link
 
 On Windows:
 
-**If using GitHub Packages:**
+**If using npm:**
 ```bash
 # Install
 npm install -g @k-l-lambda/claude-master
