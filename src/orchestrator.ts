@@ -10,6 +10,8 @@ export class Orchestrator {
   private config: Config;
   private currentRound: number = 0;
   private paused: boolean = false;
+  private interrupted: boolean = false;
+  private currentAbortController: AbortController | null = null;
   private rl: readline.Interface;
 
   constructor(config: Config, workDir: string) {
@@ -33,6 +35,11 @@ export class Orchestrator {
       process.stdin.on('data', (data) => {
         // ESC key is 0x1B
         if (data[0] === 0x1B && !this.paused) {
+          this.interrupted = true;
+          // Abort the current streaming operation
+          if (this.currentAbortController) {
+            this.currentAbortController.abort();
+          }
           this.handleInterrupt();
         }
       });
@@ -42,70 +49,16 @@ export class Orchestrator {
   private async handleInterrupt(): Promise<void> {
     this.paused = true;
 
+    // Wait a bit for the streaming to stop
+    await new Promise(resolve => setTimeout(resolve, 100));
+
     Display.newline();
-    Display.system('⏸️  Execution paused by user (ESC pressed)');
+    Display.system('⏸️  Execution interrupted by user (ESC pressed)');
+    Display.system('   Returning to instruction input...');
     Display.newline();
 
-    // Temporarily disable raw mode for input
-    if (process.stdin.isTTY) {
-      process.stdin.setRawMode(false);
-    }
-
-    const userInput = await new Promise<string>((resolve) => {
-      this.rl.question('Enter your instruction to Instructor (or press Enter to resume): ', (answer) => {
-        resolve(answer);
-      });
-    });
-
-    // Re-enable raw mode
-    if (process.stdin.isTTY) {
-      process.stdin.setRawMode(true);
-    }
-
-    if (userInput.trim()) {
-      Display.system(`User instruction: ${userInput}`);
-      Display.newline();
-
-      // Send user instruction to Instructor
-      Display.header(InstanceType.INSTRUCTOR, 'Processing User Interruption');
-
-      let thinkingBuffer = '';
-      let textBuffer = '';
-
-      const instructorResponse = await this.instructor.processUserInput(
-        userInput,
-        (chunk) => {
-          if (thinkingBuffer === '') {
-            Display.newline();
-            Display.system('Thinking...');
-          }
-          thinkingBuffer += chunk;
-          Display.thinking(chunk);
-        },
-        (chunk) => {
-          if (thinkingBuffer && textBuffer === '') {
-            Display.newline();
-            Display.system('Response:');
-          }
-          textBuffer += chunk;
-          Display.text(InstanceType.INSTRUCTOR, chunk);
-        }
-      );
-
-      Display.newline();
-
-      // If Instructor wants to send to Worker, continue the conversation
-      if (instructorResponse.shouldContinue && instructorResponse.instruction) {
-        // This will be picked up in the main loop
-        this.paused = false;
-        return;
-      }
-    } else {
-      Display.system('Resuming execution...');
-      Display.newline();
-    }
-
-    this.paused = false;
+    // Reset interrupted flag after handling
+    this.interrupted = false;
   }
 
   private async waitForUserInput(): Promise<string | null> {
@@ -114,13 +67,16 @@ export class Orchestrator {
     Display.system('   Type your instruction, or type "exit" to quit.');
     Display.newline();
 
+    // Wait a bit to avoid console output conflicts from other threads
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
     // Temporarily disable raw mode for input
     if (process.stdin.isTTY) {
       process.stdin.setRawMode(false);
     }
 
     const userInput = await new Promise<string>((resolve) => {
-      this.rl.question('Your instruction: ', (answer) => {
+      this.rl.question('Input your instruction:\n> ', (answer) => {
         resolve(answer);
       });
     });
@@ -192,27 +148,50 @@ export class Orchestrator {
           let thinkingBuffer = '';
           let textBuffer = '';
 
-          instructorResponse = await this.instructor.processUserInput(
-            userInstruction,
-            (chunk) => {
-              if (thinkingBuffer === '') {
-                Display.newline();
-                Display.system('Thinking...');
-              }
-              thinkingBuffer += chunk;
-              Display.thinking(chunk);
-            },
-            (chunk) => {
-              if (thinkingBuffer && textBuffer === '') {
-                Display.newline();
-                Display.system('Response:');
-              }
-              textBuffer += chunk;
-              Display.text(InstanceType.INSTRUCTOR, chunk);
+          // Create AbortController for this streaming operation
+          this.currentAbortController = new AbortController();
+
+          try {
+            instructorResponse = await this.instructor.processUserInput(
+              userInstruction,
+              (chunk) => {
+                if (this.interrupted) return; // Stop processing if interrupted
+                if (thinkingBuffer === '') {
+                  Display.newline();
+                  Display.system('Thinking...');
+                }
+                thinkingBuffer += chunk;
+                Display.thinking(chunk);
+              },
+              (chunk) => {
+                if (this.interrupted) return; // Stop processing if interrupted
+                if (thinkingBuffer && textBuffer === '') {
+                  Display.newline();
+                  Display.system('Response:');
+                }
+                textBuffer += chunk;
+                Display.text(InstanceType.INSTRUCTOR, chunk);
+              },
+              this.currentAbortController.signal
+            );
+          } catch (error: any) {
+            // If aborted, treat it as an interruption
+            if (error.name === 'AbortError' || error.message?.includes('aborted')) {
+              // Interruption already handled
+            } else {
+              throw error; // Re-throw other errors
             }
-          );
+          } finally {
+            this.currentAbortController = null;
+          }
 
           Display.newline();
+
+          // If interrupted, break out and wait for new instruction
+          if (this.interrupted) {
+            this.paused = false;
+            continue;
+          }
 
           // If Instructor doesn't want to continue, loop back to wait for next user input
           if (!instructorResponse.shouldContinue) {
@@ -239,53 +218,92 @@ export class Orchestrator {
           Display.newline();
 
           let workerTextBuffer = '';
-          const workerResponse = await this.worker.processInstruction(
-            instructorResponse.instruction,
-            currentWorkerModel,
-            (chunk) => {
-              if (workerTextBuffer === '') {
-                Display.system('Response:');
-              }
-              workerTextBuffer += chunk;
-              Display.text(InstanceType.WORKER, chunk);
+
+          // Create AbortController for this streaming operation
+          this.currentAbortController = new AbortController();
+
+          try {
+            const workerResponse = await this.worker.processInstruction(
+              instructorResponse.instruction,
+              currentWorkerModel,
+              (chunk) => {
+                if (this.interrupted) return; // Stop processing if interrupted
+                if (workerTextBuffer === '') {
+                  Display.system('Response:');
+                }
+                workerTextBuffer += chunk;
+                Display.text(InstanceType.WORKER, chunk);
+              },
+              this.currentAbortController.signal
+            );
+
+            Display.newline();
+
+            // If interrupted, break out of conversation loop
+            if (this.interrupted) {
+              this.paused = false;
+              instructorResponse.shouldContinue = false;
+              break;
             }
-          );
 
-          Display.newline();
+            // Instructor reviews worker response
+            this.currentRound++;
+            Display.round(this.currentRound, this.config.maxRounds);
+            Display.header(InstanceType.INSTRUCTOR, 'Reviewing Worker Response');
 
-          // Instructor reviews worker response
-          this.currentRound++;
-          Display.round(this.currentRound, this.config.maxRounds);
-          Display.header(InstanceType.INSTRUCTOR, 'Reviewing Worker Response');
+            let thinkingBuffer = '';
+            let textBuffer = '';
 
-          let thinkingBuffer = '';
-          let textBuffer = '';
+            // Create new AbortController for instructor review
+            this.currentAbortController = new AbortController();
 
-          const nextInstructorResponse = await this.instructor.processWorkerResponse(
-            workerResponse,
-            (chunk) => {
-              if (thinkingBuffer === '') {
-                Display.newline();
-                Display.system('Thinking...');
-              }
-              thinkingBuffer += chunk;
-              Display.thinking(chunk);
-            },
-            (chunk) => {
-              if (thinkingBuffer && textBuffer === '') {
-                Display.newline();
-                Display.system('Response:');
-              }
-              textBuffer += chunk;
-              Display.text(InstanceType.INSTRUCTOR, chunk);
+            const nextInstructorResponse = await this.instructor.processWorkerResponse(
+              workerResponse,
+              (chunk) => {
+                if (this.interrupted) return; // Stop processing if interrupted
+                if (thinkingBuffer === '') {
+                  Display.newline();
+                  Display.system('Thinking...');
+                }
+                thinkingBuffer += chunk;
+                Display.thinking(chunk);
+              },
+              (chunk) => {
+                if (this.interrupted) return; // Stop processing if interrupted
+                if (thinkingBuffer && textBuffer === '') {
+                  Display.newline();
+                  Display.system('Response:');
+                }
+                textBuffer += chunk;
+                Display.text(InstanceType.INSTRUCTOR, chunk);
+              },
+              this.currentAbortController.signal
+            );
+
+            Display.newline();
+
+            // If interrupted, break out of conversation loop
+            if (this.interrupted) {
+              this.paused = false;
+              instructorResponse.shouldContinue = false;
+              break;
             }
-          );
 
-          Display.newline();
-
-          instructorResponse = nextInstructorResponse;
-          currentWorkerModel = nextInstructorResponse.workerModel || this.config.workerModel;
-          continueConversation = nextInstructorResponse.shouldContinue;
+            instructorResponse = nextInstructorResponse;
+            currentWorkerModel = nextInstructorResponse.workerModel || this.config.workerModel;
+            continueConversation = nextInstructorResponse.shouldContinue;
+          } catch (error: any) {
+            // If aborted, treat it as an interruption
+            if (error.name === 'AbortError' || error.message?.includes('aborted')) {
+              this.paused = false;
+              instructorResponse.shouldContinue = false;
+              break;
+            } else {
+              throw error; // Re-throw other errors
+            }
+          } finally {
+            this.currentAbortController = null;
+          }
         }
       }
 

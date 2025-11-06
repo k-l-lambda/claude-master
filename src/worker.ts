@@ -19,7 +19,8 @@ export class WorkerManager {
   async processInstruction(
     instruction: string,
     model: string,
-    onTextChunk?: (chunk: string) => void
+    onTextChunk?: (chunk: string) => void,
+    abortSignal?: AbortSignal
   ): Promise<string> {
     this.conversationHistory.push({
       role: 'user',
@@ -44,7 +45,8 @@ export class WorkerManager {
           if (type === 'text' && onTextChunk) {
             onTextChunk(chunk);
           }
-        }
+        },
+        abortSignal
       );
 
       // Check if there are any tool uses

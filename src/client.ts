@@ -51,7 +51,8 @@ export class ClaudeClient {
     systemPrompt: string,
     tools?: Tool[],
     useThinking: boolean = false,
-    onChunk?: (chunk: string, type: 'thinking' | 'text') => void
+    onChunk?: (chunk: string, type: 'thinking' | 'text') => void,
+    abortSignal?: AbortSignal
   ): Promise<Anthropic.Message> {
     const params: Anthropic.MessageCreateParams = {
       model,
@@ -74,10 +75,13 @@ export class ClaudeClient {
       };
     }
 
-    const stream = await this.client.messages.create({
-      ...params,
-      stream: true,
-    });
+    const stream = await this.client.messages.create(
+      {
+        ...params,
+        stream: true,
+      },
+      abortSignal ? { signal: abortSignal } : undefined
+    );
 
     // Build the complete message from stream events
     let messageData: any = {

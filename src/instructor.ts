@@ -43,32 +43,35 @@ You can specify which model the Worker should use by including:
   async processUserInput(
     userMessage: string,
     onThinkingChunk?: (chunk: string) => void,
-    onTextChunk?: (chunk: string) => void
+    onTextChunk?: (chunk: string) => void,
+    abortSignal?: AbortSignal
   ): Promise<InstructorResponse> {
     this.conversationHistory.push({
       role: 'user',
       content: userMessage,
     });
 
-    return await this.executeWithTools(onThinkingChunk, onTextChunk);
+    return await this.executeWithTools(onThinkingChunk, onTextChunk, abortSignal);
   }
 
   async processWorkerResponse(
     workerResponse: string,
     onThinkingChunk?: (chunk: string) => void,
-    onTextChunk?: (chunk: string) => void
+    onTextChunk?: (chunk: string) => void,
+    abortSignal?: AbortSignal
   ): Promise<InstructorResponse> {
     this.conversationHistory.push({
       role: 'user',
       content: `Worker says: ${workerResponse}`,
     });
 
-    return await this.executeWithTools(onThinkingChunk, onTextChunk);
+    return await this.executeWithTools(onThinkingChunk, onTextChunk, abortSignal);
   }
 
   private async executeWithTools(
     onThinkingChunk?: (chunk: string) => void,
-    onTextChunk?: (chunk: string) => void
+    onTextChunk?: (chunk: string) => void,
+    abortSignal?: AbortSignal
   ): Promise<InstructorResponse> {
     // Agentic loop: keep calling API until we get a non-tool response
     let maxIterations = 10;
@@ -91,7 +94,8 @@ You can specify which model the Worker should use by including:
           } else if (type === 'text' && onTextChunk) {
             onTextChunk(chunk);
           }
-        }
+        },
+        abortSignal
       );
 
       // Extract thinking
