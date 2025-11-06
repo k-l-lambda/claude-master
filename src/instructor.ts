@@ -172,12 +172,15 @@ You can specify which model the Worker should use by including:
   }
 
   private parseInstructorResponse(text: string, thinking: string): InstructorResponse {
-    // Check if Instructor is done - look for DONE in the last part of the response
+    // Check if Instructor is done - look for DONE as a standalone statement
     // Allow for markdown formatting like **DONE**, _DONE_, or plain DONE
-    // Allow some punctuation and whitespace after DONE
+    // DONE must be on its own line or at the start/end of response with only punctuation
     const trimmedText = text.trim();
     const lastLine = trimmedText.split('\n').slice(-3).join('\n'); // Check last 3 lines
-    const isDone = /\*\*DONE\*\*|__DONE__|_DONE_|\bDONE\b/i.test(lastLine);
+    // Match DONE only when it's:
+    // - Formatted: **DONE**, __DONE__, _DONE_
+    // - Or standalone: line starts with DONE, optionally followed by punctuation/whitespace
+    const isDone = /\*\*DONE\*\*|__DONE__|_DONE_|^\s*DONE[\s.!]*$/im.test(lastLine);
 
     // Extract instruction and model from "Tell worker" directive
     // Supports multiple formats:
