@@ -128,7 +128,7 @@ export class ClaudeClient {
             block.input = JSON.parse(block.partial_json);
             delete block.partial_json; // Clean up temporary field
           } catch (e) {
-            console.error('[StreamMessage] Failed to parse tool input JSON:', e);
+            // Failed to parse tool input JSON, use empty object
             block.input = {};
           }
         }

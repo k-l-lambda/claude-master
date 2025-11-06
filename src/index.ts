@@ -20,7 +20,7 @@ program
   .name('claude-master')
   .description('CLI tool to orchestrate Instructor and Worker Claude instances')
   .version('1.0.0')
-  .argument('<instruction>', 'Instruction for Instructor (e.g., "Read the README.md to be aware about our task")')
+  .argument('[instruction]', 'Optional initial instruction for Instructor (can be provided later interactively)')
   .option('-d, --work-dir <path>', 'Working directory for the project', process.cwd())
   .option('-r, --max-rounds <number>', 'Maximum number of conversation rounds', parseInt)
   .option('-i, --instructor-model <model>', 'Model for Instructor', 'claude-sonnet-4-5-20250929')
@@ -69,11 +69,13 @@ program
       };
 
       // Create and run orchestrator
-      const orchestrator = new Orchestrator(config, instruction, workDir);
-      await orchestrator.run();
+      const orchestrator = new Orchestrator(config, workDir);
+
+      // Run with optional initial instruction
+      await orchestrator.run(instruction);
 
       Display.newline();
-      Display.success('Task completed successfully');
+      Display.success('Session ended');
       process.exit(0);
 
     } catch (error) {

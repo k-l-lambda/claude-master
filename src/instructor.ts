@@ -78,7 +78,6 @@ You can specify which model the Worker should use by including:
 
     while (iteration < maxIterations) {
       iteration++;
-      console.log(`[Instructor] Iteration ${iteration}`);
 
       const response = await this.client.streamMessage(
         this.conversationHistory,
@@ -124,7 +123,6 @@ You can specify which model the Worker should use by including:
       // Execute tools and collect results
       const toolResults: any[] = [];
       for (const toolUse of toolUses) {
-        console.log(`[Instructor] Executing tool: ${toolUse.name}`);
         const result = await this.toolExecutor.executeTool(toolUse);
         toolResults.push(result);
       }
@@ -160,10 +158,8 @@ You can specify which model the Worker should use by including:
   }
 
   private parseInstructorResponse(text: string, thinking: string): InstructorResponse {
-	console.log("instructor response:", text);
     // Check if Instructor is done - must be standalone "DONE" or at end of sentence
     const isDone = /\bDONE\b\s*$/i.test(text.trim()) || text.trim().toUpperCase() === 'DONE';
-	console.log("isDone:", isDone);
 
     // Extract instruction after "Tell worker:" (case insensitive)
     const tellWorkerMatch = text.match(/tell\s+worker:\s*([\s\S]*)/i);

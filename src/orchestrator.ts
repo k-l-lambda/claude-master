@@ -9,14 +9,12 @@ export class Orchestrator {
   private worker: WorkerManager;
   private config: Config;
   private currentRound: number = 0;
-  private userInstruction: string;
   private paused: boolean = false;
   private rl: readline.Interface;
 
-  constructor(config: Config, userInstruction: string, workDir: string) {
+  constructor(config: Config, workDir: string) {
     this.config = config;
-    this.userInstruction = userInstruction;
-    this.instructor = new InstructorManager(config, userInstruction, workDir);
+    this.instructor = new InstructorManager(config, '', workDir); // Empty initial instruction
     this.worker = new WorkerManager(config, workDir);
 
     // Setup readline for user interruption
@@ -110,6 +108,36 @@ export class Orchestrator {
     this.paused = false;
   }
 
+  private async waitForUserInput(): Promise<string | null> {
+    Display.newline();
+    Display.system('💬 Instructor is waiting for your next instruction...');
+    Display.system('   Type your instruction, or type "exit" to quit.');
+    Display.newline();
+
+    // Temporarily disable raw mode for input
+    if (process.stdin.isTTY) {
+      process.stdin.setRawMode(false);
+    }
+
+    const userInput = await new Promise<string>((resolve) => {
+      this.rl.question('Your instruction: ', (answer) => {
+        resolve(answer);
+      });
+    });
+
+    // Re-enable raw mode
+    if (process.stdin.isTTY) {
+      process.stdin.setRawMode(true);
+    }
+
+    const trimmed = userInput.trim();
+    if (trimmed.toLowerCase() === 'exit' || trimmed.toLowerCase() === 'quit') {
+      return null;
+    }
+
+    return trimmed || null;
+  }
+
   private cleanup(): void {
     if (process.stdin.isTTY) {
       process.stdin.setRawMode(false);
@@ -117,7 +145,7 @@ export class Orchestrator {
     this.rl.close();
   }
 
-  async run(): Promise<void> {
+  async run(initialInstruction?: string): Promise<void> {
     Display.info(`Starting dual-AI orchestration system`);
     Display.info(`Instructor Model: ${this.config.instructorModel}`);
     Display.info(`Worker Default Model: ${this.config.workerModel}`);
@@ -128,115 +156,136 @@ export class Orchestrator {
     Display.newline();
 
     try {
-      // Initial instruction to Instructor
-      this.currentRound = 1;
-      Display.round(this.currentRound, this.config.maxRounds);
+      let instructorResponse: any = null;
+      let continueSession = true;
+      let isFirstRun = true;
 
-      Display.header(InstanceType.INSTRUCTOR, 'Processing Initial Instruction');
-      Display.system('User Instruction: ' + this.userInstruction);
-
-      let thinkingBuffer = '';
-      let textBuffer = '';
-
-      // Send a simple prompt to start the Instructor thinking
-      const instructorResponse = await this.instructor.processUserInput(
-        "Start working on the task.",
-        (chunk) => {
-          if (thinkingBuffer === '') {
-            Display.newline();
-            Display.system('Thinking...');
+      // Outer loop: keep the session alive until user exits
+      while (continueSession) {
+        // If no active instruction, wait for user input
+        if (!instructorResponse || !instructorResponse.shouldContinue) {
+          if (instructorResponse) {
+            Display.success('Instructor has completed the current task');
           }
-          thinkingBuffer += chunk;
-          Display.thinking(chunk);
-        },
-        (chunk) => {
-          if (thinkingBuffer && textBuffer === '') {
-            Display.newline();
-            Display.system('Response:');
+
+          let userInstruction: string | null;
+
+          // Use initial instruction on first run if provided
+          if (isFirstRun && initialInstruction) {
+            userInstruction = initialInstruction;
+            isFirstRun = false;
+          } else {
+            userInstruction = await this.waitForUserInput();
           }
-          textBuffer += chunk;
-          Display.text(InstanceType.INSTRUCTOR, chunk);
+
+          if (!userInstruction) {
+            Display.info('Session ended by user');
+            break;
+          }
+
+          // Initial instruction to Instructor
+          this.currentRound++;
+          Display.round(this.currentRound, this.config.maxRounds);
+          Display.header(InstanceType.INSTRUCTOR, 'Processing User Instruction');
+          Display.system('User Instruction: ' + userInstruction);
+
+          let thinkingBuffer = '';
+          let textBuffer = '';
+
+          instructorResponse = await this.instructor.processUserInput(
+            userInstruction,
+            (chunk) => {
+              if (thinkingBuffer === '') {
+                Display.newline();
+                Display.system('Thinking...');
+              }
+              thinkingBuffer += chunk;
+              Display.thinking(chunk);
+            },
+            (chunk) => {
+              if (thinkingBuffer && textBuffer === '') {
+                Display.newline();
+                Display.system('Response:');
+              }
+              textBuffer += chunk;
+              Display.text(InstanceType.INSTRUCTOR, chunk);
+            }
+          );
+
+          Display.newline();
+
+          // If Instructor doesn't want to continue, loop back to wait for next user input
+          if (!instructorResponse.shouldContinue) {
+            continue;
+          }
         }
-      );
 
-      Display.newline();
+        // Main conversation loop between Instructor and Worker
+        let continueConversation = true;
+        let currentWorkerModel = instructorResponse.workerModel || this.config.workerModel;
 
-      if (!instructorResponse.shouldContinue) {
-        Display.success('Instructor has finished the task');
-        return;
-      }
-
-      // Main conversation loop
-      let continueConversation = true;
-      let currentWorkerModel = instructorResponse.workerModel || this.config.workerModel;
-
-      while (continueConversation) {
-        // Check round limit
-        if (this.config.maxRounds && this.currentRound > this.config.maxRounds) {
-          Display.error(`Maximum rounds (${this.config.maxRounds}) reached. Stopping.`);
-          break;
-        }
-
-        // Worker processes instruction
-        Display.header(InstanceType.WORKER, `Processing Instruction (Model: ${currentWorkerModel})`);
-        Display.system('Instruction from Instructor:');
-        console.log(instructorResponse.instruction);
-        Display.newline();
-
-        let workerTextBuffer = '';
-        const workerResponse = await this.worker.processInstruction(
-          instructorResponse.instruction,
-          currentWorkerModel,
-          (chunk) => {
-            if (workerTextBuffer === '') {
-              Display.system('Response:');
-            }
-            workerTextBuffer += chunk;
-            Display.text(InstanceType.WORKER, chunk);
+        while (continueConversation && instructorResponse.shouldContinue) {
+          // Check round limit
+          if (this.config.maxRounds && this.currentRound > this.config.maxRounds) {
+            Display.error(`Maximum rounds (${this.config.maxRounds}) reached. Stopping.`);
+            instructorResponse.shouldContinue = false;
+            break;
           }
-        );
 
-        Display.newline();
+          // Worker processes instruction
+          Display.header(InstanceType.WORKER, `Processing Instruction (Model: ${currentWorkerModel})`);
+          Display.system('Instruction from Instructor:');
+          Display.system(instructorResponse.instruction);
+          Display.newline();
 
-        // Instructor reviews worker response
-        this.currentRound++;
-        Display.round(this.currentRound, this.config.maxRounds);
-        Display.header(InstanceType.INSTRUCTOR, 'Reviewing Worker Response');
-
-        thinkingBuffer = '';
-        textBuffer = '';
-
-        const nextInstructorResponse = await this.instructor.processWorkerResponse(
-          workerResponse,
-          (chunk) => {
-            if (thinkingBuffer === '') {
-              Display.newline();
-              Display.system('Thinking...');
+          let workerTextBuffer = '';
+          const workerResponse = await this.worker.processInstruction(
+            instructorResponse.instruction,
+            currentWorkerModel,
+            (chunk) => {
+              if (workerTextBuffer === '') {
+                Display.system('Response:');
+              }
+              workerTextBuffer += chunk;
+              Display.text(InstanceType.WORKER, chunk);
             }
-            thinkingBuffer += chunk;
-            Display.thinking(chunk);
-          },
-          (chunk) => {
-            if (thinkingBuffer && textBuffer === '') {
-              Display.newline();
-              Display.system('Response:');
+          );
+
+          Display.newline();
+
+          // Instructor reviews worker response
+          this.currentRound++;
+          Display.round(this.currentRound, this.config.maxRounds);
+          Display.header(InstanceType.INSTRUCTOR, 'Reviewing Worker Response');
+
+          let thinkingBuffer = '';
+          let textBuffer = '';
+
+          const nextInstructorResponse = await this.instructor.processWorkerResponse(
+            workerResponse,
+            (chunk) => {
+              if (thinkingBuffer === '') {
+                Display.newline();
+                Display.system('Thinking...');
+              }
+              thinkingBuffer += chunk;
+              Display.thinking(chunk);
+            },
+            (chunk) => {
+              if (thinkingBuffer && textBuffer === '') {
+                Display.newline();
+                Display.system('Response:');
+              }
+              textBuffer += chunk;
+              Display.text(InstanceType.INSTRUCTOR, chunk);
             }
-            textBuffer += chunk;
-            Display.text(InstanceType.INSTRUCTOR, chunk);
-          }
-        );
+          );
 
-        Display.newline();
+          Display.newline();
 
-        continueConversation = nextInstructorResponse.shouldContinue;
-        instructorResponse.instruction = nextInstructorResponse.instruction;
-        instructorResponse.workerModel = nextInstructorResponse.workerModel;
-        instructorResponse.shouldContinue = nextInstructorResponse.shouldContinue;
-        currentWorkerModel = nextInstructorResponse.workerModel || this.config.workerModel;
-
-        if (!continueConversation) {
-          Display.success('Instructor has completed the task');
-          break;
+          instructorResponse = nextInstructorResponse;
+          currentWorkerModel = nextInstructorResponse.workerModel || this.config.workerModel;
+          continueConversation = nextInstructorResponse.shouldContinue;
         }
       }
 

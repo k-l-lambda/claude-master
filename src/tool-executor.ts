@@ -25,10 +25,6 @@ export class ToolExecutor {
   }
 
   async executeTool(toolUse: ToolUse): Promise<ToolResult> {
-    console.log(`[ToolExecutor] Executing tool: ${toolUse.name}`);
-    console.log(`[ToolExecutor] Full toolUse object:`, JSON.stringify(toolUse, null, 2));
-    console.log(`[ToolExecutor] Input:`, JSON.stringify(toolUse.input, null, 2));
-
     try {
       let result: string;
 
@@ -58,15 +54,12 @@ export class ToolExecutor {
           throw new Error(`Unknown tool: ${toolUse.name}`);
       }
 
-      console.log(`[ToolExecutor] Result: ${result.substring(0, 200)}...`);
-
       return {
         type: 'tool_result',
         tool_use_id: toolUse.id,
         content: result,
       };
     } catch (error) {
-      console.error(`[ToolExecutor] Error:`, error);
       return {
         type: 'tool_result',
         tool_use_id: toolUse.id,

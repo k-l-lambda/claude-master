@@ -1,4 +1,3 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { ClaudeClient } from './client.js';
 import { Config, Message } from './types.js';
 import { workerTools } from './tools.js';
@@ -6,14 +5,12 @@ import { ToolExecutor } from './tool-executor.js';
 
 export class WorkerManager {
   private client: ClaudeClient;
-  private config: Config;
   private conversationHistory: Message[] = [];
   private systemPrompt: string;
   private toolExecutor: ToolExecutor;
 
   constructor(config: Config, workDir: string) {
     this.client = new ClaudeClient(config);
-    this.config = config;
     this.toolExecutor = new ToolExecutor(workDir);
     // Simple default - Instructor can override by instructing Worker
     this.systemPrompt = 'You are a helpful AI assistant that follows instructions to implement tasks. You have access to tools for file operations and command execution.';
@@ -36,7 +33,6 @@ export class WorkerManager {
 
     while (iteration < maxIterations) {
       iteration++;
-      console.log(`[Worker] Iteration ${iteration}`);
 
       const response = await this.client.streamMessage(
         this.conversationHistory,
@@ -73,7 +69,6 @@ export class WorkerManager {
       // Execute tools and collect results
       const toolResults: any[] = [];
       for (const toolUse of toolUses) {
-        console.log(`[Worker] Executing tool: ${toolUse.name}`);
         const result = await this.toolExecutor.executeTool(toolUse);
         toolResults.push(result);
       }
