@@ -114,6 +114,38 @@ export const instructorTools: Tool[] = [
       required: ['command'],
     },
   },
+  {
+    name: 'grant_worker_permission',
+    description: 'Grant Worker permission to use a restricted tool. Use this when Worker needs access to tools like git_command that are normally restricted.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        tool_name: {
+          type: 'string',
+          description: 'Name of the tool to grant permission for (e.g., "git_command")',
+        },
+        reason: {
+          type: 'string',
+          description: 'Reason for granting this permission (optional)',
+        },
+      },
+      required: ['tool_name'],
+    },
+  },
+  {
+    name: 'revoke_worker_permission',
+    description: 'Revoke Worker permission to use a tool. Use this to remove previously granted permissions.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        tool_name: {
+          type: 'string',
+          description: 'Name of the tool to revoke permission for',
+        },
+      },
+      required: ['tool_name'],
+    },
+  },
 ];
 
 // Full tools for Worker (all except git and dangerous commands)

@@ -19,6 +19,9 @@ export class Orchestrator {
     this.instructor = new InstructorManager(config, '', workDir); // Empty initial instruction
     this.worker = new WorkerManager(config, workDir);
 
+    // Link Worker's ToolExecutor to Instructor so it can manage permissions
+    this.instructor.setWorkerToolExecutor(this.worker.getToolExecutor());
+
     // Setup readline for user interruption
     this.rl = readline.createInterface({
       input: process.stdin,

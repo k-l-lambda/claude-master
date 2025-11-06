@@ -11,7 +11,11 @@ export class WorkerManager {
 
   constructor(config: Config, workDir: string) {
     this.client = new ClaudeClient(config);
-    this.toolExecutor = new ToolExecutor(workDir);
+    // Pass allowed tool names to ToolExecutor
+    const allowedToolNames = workerTools.map(t => t.name);
+    // Git commands are permanently forbidden for Worker
+    const permanentlyForbiddenTools = ['git_command'];
+    this.toolExecutor = new ToolExecutor(workDir, allowedToolNames, permanentlyForbiddenTools);
     // Simple default - Instructor can override by instructing Worker
     this.systemPrompt = 'You are a helpful AI assistant that follows instructions to implement tasks. You have access to tools for file operations and command execution.';
   }
@@ -111,5 +115,9 @@ export class WorkerManager {
 
   reset(): void {
     this.conversationHistory = [];
+  }
+
+  getToolExecutor(): ToolExecutor {
+    return this.toolExecutor;
   }
 }

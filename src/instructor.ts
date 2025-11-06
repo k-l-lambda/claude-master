@@ -10,11 +10,15 @@ export class InstructorManager {
   private conversationHistory: Message[] = [];
   private systemPrompt: string;
   private toolExecutor: ToolExecutor;
+  private workerToolExecutor: ToolExecutor | null = null;
 
   constructor(config: Config, userInstruction: string, workDir: string) {
     this.client = new ClaudeClient(config);
     this.config = config;
-    this.toolExecutor = new ToolExecutor(workDir);
+    // Pass allowed tool names to ToolExecutor
+    const allowedToolNames = instructorTools.map(t => t.name);
+    // Instructor has no permanently forbidden tools (empty array)
+    this.toolExecutor = new ToolExecutor(workDir, allowedToolNames, []);
 
     // Instructor's role: understand the task and orchestrate the Worker
     this.systemPrompt = `${userInstruction}
@@ -127,8 +131,14 @@ You can specify which model the Worker should use by including:
       // Execute tools and collect results
       const toolResults: any[] = [];
       for (const toolUse of toolUses) {
-        const result = await this.toolExecutor.executeTool(toolUse);
-        toolResults.push(result);
+        // Handle special permission management tools
+        if (toolUse.name === 'grant_worker_permission' || toolUse.name === 'revoke_worker_permission') {
+          const result = await this.handlePermissionTool(toolUse);
+          toolResults.push(result);
+        } else {
+          const result = await this.toolExecutor.executeTool(toolUse);
+          toolResults.push(result);
+        }
       }
 
       // Add assistant message with tool uses to history
@@ -236,5 +246,65 @@ You can specify which model the Worker should use by including:
 
   getConversationHistory(): Message[] {
     return [...this.conversationHistory];
+  }
+
+  setWorkerToolExecutor(workerToolExecutor: ToolExecutor): void {
+    this.workerToolExecutor = workerToolExecutor;
+  }
+
+  private async handlePermissionTool(toolUse: any): Promise<any> {
+    try {
+      if (!this.workerToolExecutor) {
+        return {
+          type: 'tool_result',
+          tool_use_id: toolUse.id,
+          content: 'Error: Worker ToolExecutor not initialized. Cannot manage permissions.',
+          is_error: true,
+        };
+      }
+
+      const toolName = toolUse.input.tool_name;
+
+      if (toolUse.name === 'grant_worker_permission') {
+        // Check if tool is permanently forbidden for Worker
+        if (this.workerToolExecutor.isPermanentlyForbidden(toolName)) {
+          return {
+            type: 'tool_result',
+            tool_use_id: toolUse.id,
+            content: `❌ Permission denied: Tool "${toolName}" is permanently forbidden for Worker due to security restrictions. This tool can only be used by the Instructor.\n\nPermanently forbidden tools: ${this.workerToolExecutor.getPermanentlyForbiddenTools().join(', ')}`,
+            is_error: true,
+          };
+        }
+
+        this.workerToolExecutor.grantPermission(toolName);
+        const reason = toolUse.input.reason || 'No reason provided';
+        return {
+          type: 'tool_result',
+          tool_use_id: toolUse.id,
+          content: `✓ Permission granted: Worker can now use "${toolName}". Reason: ${reason}\nWorker's current permissions: ${this.workerToolExecutor.getAllowedTools().join(', ')}`,
+        };
+      } else if (toolUse.name === 'revoke_worker_permission') {
+        this.workerToolExecutor.revokePermission(toolName);
+        return {
+          type: 'tool_result',
+          tool_use_id: toolUse.id,
+          content: `✓ Permission revoked: Worker can no longer use "${toolName}".\nWorker's current permissions: ${this.workerToolExecutor.getAllowedTools().join(', ')}`,
+        };
+      }
+
+      return {
+        type: 'tool_result',
+        tool_use_id: toolUse.id,
+        content: 'Unknown permission tool',
+        is_error: true,
+      };
+    } catch (error) {
+      return {
+        type: 'tool_result',
+        tool_use_id: toolUse.id,
+        content: error instanceof Error ? error.message : String(error),
+        is_error: true,
+      };
+    }
   }
 }

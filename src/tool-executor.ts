@@ -19,12 +19,72 @@ export interface ToolResult {
 
 export class ToolExecutor {
   private workDir: string;
+  private allowedTools: Set<string>;
+  private permanentlyForbiddenTools: Set<string>;
 
-  constructor(workDir: string) {
+  constructor(workDir: string, allowedTools: string[], permanentlyForbiddenTools: string[] = []) {
     this.workDir = workDir;
+    this.allowedTools = new Set(allowedTools);
+    this.permanentlyForbiddenTools = new Set(permanentlyForbiddenTools);
+  }
+
+  /**
+   * Grant additional permission to use a tool
+   * @throws Error if tool is permanently forbidden
+   */
+  grantPermission(toolName: string): void {
+    if (this.permanentlyForbiddenTools.has(toolName)) {
+      throw new Error(`Cannot grant permission for "${toolName}": This tool is permanently forbidden for security reasons.`);
+    }
+    this.allowedTools.add(toolName);
+  }
+
+  /**
+   * Revoke permission to use a tool
+   */
+  revokePermission(toolName: string): void {
+    this.allowedTools.delete(toolName);
+  }
+
+  /**
+   * Check if a tool is allowed
+   */
+  hasPermission(toolName: string): boolean {
+    return this.allowedTools.has(toolName);
+  }
+
+  /**
+   * Check if a tool is permanently forbidden
+   */
+  isPermanentlyForbidden(toolName: string): boolean {
+    return this.permanentlyForbiddenTools.has(toolName);
+  }
+
+  /**
+   * Get list of all allowed tools
+   */
+  getAllowedTools(): string[] {
+    return Array.from(this.allowedTools);
+  }
+
+  /**
+   * Get list of permanently forbidden tools
+   */
+  getPermanentlyForbiddenTools(): string[] {
+    return Array.from(this.permanentlyForbiddenTools);
   }
 
   async executeTool(toolUse: ToolUse): Promise<ToolResult> {
+    // Check if tool is allowed
+    if (!this.allowedTools.has(toolUse.name)) {
+      return {
+        type: 'tool_result',
+        tool_use_id: toolUse.id,
+        content: `Permission denied: Tool "${toolUse.name}" is not available. This tool requires elevated permissions that only the Instructor has. Please ask the Instructor to perform this operation.`,
+        is_error: true,
+      };
+    }
+
     try {
       let result: string;
 
