@@ -115,6 +115,20 @@ export const instructorTools: Tool[] = [
     },
   },
   {
+    name: 'bash_command',
+    description: 'Execute bash commands for file system exploration (ls, find, tree, etc.) and other safe operations',
+    input_schema: {
+      type: 'object',
+      properties: {
+        command: {
+          type: 'string',
+          description: 'Bash command to execute (e.g., "ls -la", "find . -name *.ts", "tree -L 2")',
+        },
+      },
+      required: ['command'],
+    },
+  },
+  {
     name: 'grant_worker_permission',
     description: 'Grant Worker permission to use a restricted tool. Use this when Worker needs access to tools like git_command that are normally restricted.',
     input_schema: {

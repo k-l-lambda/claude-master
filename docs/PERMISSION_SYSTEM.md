@@ -12,6 +12,7 @@ The Instructor has access to all tools including sensitive operations:
 - `edit_file` - Edit existing files
 - `glob_files` - Find files by pattern
 - `grep_search` - Search in files
+- **`bash_command`** - Execute bash commands (ls, find, tree, etc.)
 - **`git_command`** - Execute git operations (**PERMANENTLY FORBIDDEN for Worker**)
 - **`grant_worker_permission`** - Grant Worker permission to use a restricted tool (except permanently forbidden ones)
 - **`revoke_worker_permission`** - Revoke Worker's permission to use a tool
