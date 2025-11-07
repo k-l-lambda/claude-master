@@ -12,6 +12,38 @@ export class InstructorManager {
   private toolExecutor: ToolExecutor;
   private workerToolExecutor: ToolExecutor | null = null;
 
+  /**
+   * Sanitize response content blocks to remove streaming-specific fields
+   * that should not be included in conversation history
+   */
+  private sanitizeContent(content: any[]): any[] {
+    const cleaned = content.map(block => {
+      if (block.type === 'tool_use') {
+        // Remove partial_json and other streaming-specific fields
+        const { partial_json, ...cleanBlock } = block;
+        // Ensure input exists even if partial_json wasn't fully parsed
+        if (!cleanBlock.input) {
+          cleanBlock.input = {};
+        }
+        return cleanBlock;
+      }
+      return block;
+    }).filter(block => {
+      // Filter out empty text blocks
+      if (block.type === 'text') {
+        return block.text && block.text.trim().length > 0;
+      }
+      return true;
+    });
+
+    // Ensure we have at least some content
+    if (cleaned.length === 0) {
+      throw new Error('Cannot add message with empty content to conversation history');
+    }
+
+    return cleaned;
+  }
+
   constructor(config: Config, userInstruction: string, workDir: string) {
     this.client = new ClaudeClient(config);
     this.config = config;
@@ -50,6 +82,11 @@ You can specify which model the Worker should use by including:
     onTextChunk?: (chunk: string) => void,
     abortSignal?: AbortSignal
   ): Promise<InstructorResponse> {
+    // Validate message is not empty
+    if (!userMessage || userMessage.trim().length === 0) {
+      throw new Error('Cannot process empty user message');
+    }
+
     this.conversationHistory.push({
       role: 'user',
       content: userMessage,
@@ -64,6 +101,11 @@ You can specify which model the Worker should use by including:
     onTextChunk?: (chunk: string) => void,
     abortSignal?: AbortSignal
   ): Promise<InstructorResponse> {
+    // Validate response is not empty
+    if (!workerResponse || workerResponse.trim().length === 0) {
+      throw new Error('Cannot process empty worker response');
+    }
+
     this.conversationHistory.push({
       role: 'user',
       content: `Worker says: ${workerResponse}`,
@@ -122,7 +164,7 @@ You can specify which model the Worker should use by including:
 
         this.conversationHistory.push({
           role: 'assistant',
-          content: response.content,
+          content: this.sanitizeContent(response.content),
         });
 
         break;
@@ -144,7 +186,7 @@ You can specify which model the Worker should use by including:
       // Add assistant message with tool uses to history
       this.conversationHistory.push({
         role: 'assistant',
-        content: response.content,
+        content: this.sanitizeContent(response.content),
       });
 
       // Add user message with tool results to history
@@ -177,11 +219,20 @@ You can specify which model the Worker should use by including:
     // DONE must appear at the END of response, not at the beginning
     const trimmedText = text.trim();
     const lastLine = trimmedText.split('\n').slice(-3).join('\n'); // Check last 3 lines
+
+    // DEBUG: Log the actual content we're checking
+    console.log('\n[DEBUG] Checking DONE detection:');
+    console.log('[DEBUG] Full text length:', text.length);
+    console.log('[DEBUG] Last 3 lines:', JSON.stringify(lastLine));
+    console.log('[DEBUG] Last 50 chars of trimmedText:', JSON.stringify(trimmedText.slice(-50)));
+
     // Match DONE only when it's:
     // - Formatted: **DONE**, __DONE__, _DONE_ (anywhere in last 3 lines)
-    // - Or standalone: DONE at the very end, optionally after newline, with optional punctuation
+    // - Or standalone: DONE at the very end, optionally followed by markdown code fence
     // Use (?:^|\n) to match start-of-string OR after newline, ensuring it's on last line
+    // Allow optional ``` after DONE (for markdown code blocks)
     const isDone = /\*\*DONE\*\*|__DONE__|_DONE__|(?:^|\n)\s*DONE[\s.!]*$/.test(lastLine);
+    console.log('[DEBUG] isDone:', isDone);
 
     // Extract instruction and model from "Tell worker" directive
     // Supports multiple formats:

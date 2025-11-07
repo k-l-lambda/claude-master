@@ -16,51 +16,44 @@ export class Orchestrator {
 
   constructor(config: Config, workDir: string) {
     this.config = config;
-    this.instructor = new InstructorManager(config, '', workDir); // Empty initial instruction
+    this.instructor = new InstructorManager(config, '', workDir);
     this.worker = new WorkerManager(config, workDir);
-
-    // Link Worker's ToolExecutor to Instructor so it can manage permissions
     this.instructor.setWorkerToolExecutor(this.worker.getToolExecutor());
 
-    // Setup readline for user interruption
     this.rl = readline.createInterface({
       input: process.stdin,
       output: process.stdout,
     });
 
-    // Setup ESC key handler
     this.setupKeyHandler();
   }
 
   private setupKeyHandler(): void {
     if (process.stdin.isTTY) {
-      process.stdin.setRawMode(true);
-      process.stdin.on('data', (data) => {
-        // ESC key is 0x1B
-        if (data[0] === 0x1B && !this.paused) {
-          this.interrupted = true;
-          // Abort the current streaming operation
-          if (this.currentAbortController) {
-            this.currentAbortController.abort();
+      try {
+        process.stdin.setRawMode(true);
+        process.stdin.on('data', (data) => {
+          if (data[0] === 0x1B && !this.paused) {
+            this.interrupted = true;
+            if (this.currentAbortController) {
+              this.currentAbortController.abort();
+            }
+            this.handleInterrupt();
           }
-          this.handleInterrupt();
-        }
-      });
+        });
+      } catch (error) {
+        console.warn('⚠️  Raw mode unavailable - ESC key interrupt disabled');
+      }
     }
   }
 
   private async handleInterrupt(): Promise<void> {
     this.paused = true;
-
-    // Wait a bit for the streaming to stop
     await new Promise(resolve => setTimeout(resolve, 100));
-
     Display.newline();
     Display.system('⏸️  Execution interrupted by user (ESC pressed)');
     Display.system('   Returning to instruction input...');
     Display.newline();
-
-    // Reset interrupted flag after handling
     this.interrupted = false;
   }
 
@@ -70,12 +63,14 @@ export class Orchestrator {
     Display.system('   Type your instruction, or type "exit" to quit.');
     Display.newline();
 
-    // Wait a bit to avoid console output conflicts from other threads
     await new Promise(resolve => setTimeout(resolve, 1000));
 
-    // Temporarily disable raw mode for input
     if (process.stdin.isTTY) {
-      process.stdin.setRawMode(false);
+      try {
+        process.stdin.setRawMode(false);
+      } catch (error) {
+        // Ignore
+      }
     }
 
     const userInput = await new Promise<string>((resolve) => {
@@ -84,9 +79,12 @@ export class Orchestrator {
       });
     });
 
-    // Re-enable raw mode
     if (process.stdin.isTTY) {
-      process.stdin.setRawMode(true);
+      try {
+        process.stdin.setRawMode(true);
+      } catch (error) {
+        // Ignore
+      }
     }
 
     const trimmed = userInput.trim();
@@ -99,9 +97,218 @@ export class Orchestrator {
 
   private cleanup(): void {
     if (process.stdin.isTTY) {
-      process.stdin.setRawMode(false);
+      try {
+        process.stdin.setRawMode(false);
+      } catch (error) {
+        // Ignore
+      }
     }
     this.rl.close();
+  }
+
+  private handleApiError(error: any): 'continue' | 'break' | 'throw' {
+    if (error.name === 'AbortError' || error.message?.includes('aborted')) {
+      return 'continue';
+    }
+
+    if (error.status === 400 && error.message?.includes('Extra inputs are not permitted')) {
+      Display.error('API Error: Invalid message format detected');
+      Display.system('   This usually happens due to streaming artifacts in conversation history.');
+      Display.system('   The conversation history has been sanitized. Please try again.');
+      Display.newline();
+      return 'break';
+    }
+
+    if (error.status === 400 && error.message?.includes('all messages must have non-empty content')) {
+      Display.error('API Error: Cannot send empty message');
+      Display.system('   This usually happens when a response contains no text or tools.');
+      Display.system('   Please try again with a new instruction.');
+      Display.newline();
+      return 'break';
+    }
+
+    if (error.message?.includes('Cannot add message with empty content') || error.message?.includes('Cannot process empty')) {
+      Display.error('Cannot process empty content');
+      Display.system('   The AI response contained no valid content.');
+      Display.system('   Please try again with a new instruction.');
+      Display.newline();
+      return 'break';
+    }
+
+    return 'throw';
+  }
+
+  private async callInstructor(
+    message: string,
+    context: 'user-input' | 'worker-response' | 'correction'
+  ): Promise<any | null> {
+    this.currentAbortController = new AbortController();
+
+    let thinkingBuffer = '';
+    let textBuffer = '';
+
+    const onThinkingChunk = (chunk: string) => {
+      if (this.interrupted) return;
+      if (thinkingBuffer === '') {
+        Display.newline();
+        Display.system('Thinking...');
+      }
+      thinkingBuffer += chunk;
+      Display.thinking(chunk);
+    };
+
+    const onTextChunk = (chunk: string) => {
+      if (this.interrupted) return;
+      if (thinkingBuffer && textBuffer === '') {
+        Display.newline();
+        Display.system('Response:');
+      }
+      textBuffer += chunk;
+      Display.text(InstanceType.INSTRUCTOR, chunk);
+    };
+
+    try {
+      let response;
+      if (context === 'worker-response') {
+        response = await this.instructor.processWorkerResponse(
+          message,
+          onThinkingChunk,
+          onTextChunk,
+          this.currentAbortController.signal
+        );
+      } else {
+        response = await this.instructor.processUserInput(
+          message,
+          onThinkingChunk,
+          onTextChunk,
+          this.currentAbortController.signal
+        );
+      }
+
+      Display.newline();
+      Display.instructorStatus(
+        response.workerModel || this.config.workerModel,
+        response.shouldContinue,
+        response.needsCorrection || false
+      );
+
+      if (this.interrupted) {
+        this.paused = false;
+        return null;
+      }
+
+      return response;
+    } catch (error: any) {
+      const action = this.handleApiError(error);
+      if (action === 'throw') throw error;
+      return null;
+    } finally {
+      this.currentAbortController = null;
+    }
+  }
+
+  private async handleNeedsCorrection(response: any): Promise<any | null> {
+    if (!response?.needsCorrection) {
+      return response;
+    }
+
+    Display.warning('⚠️  Instructor did not use the correct communication format.');
+    Display.system('   To communicate with Worker, use: "Tell worker: [instruction]"');
+    Display.system('   To finish the task, respond with: "DONE"');
+    Display.newline();
+
+    this.currentRound++;
+    Display.round(this.currentRound, this.config.maxRounds);
+    Display.header(InstanceType.INSTRUCTOR, 'Please provide instruction or DONE');
+
+    const correctedResponse = await this.callInstructor(
+      'Please continue. Remember to use "Tell worker: [instruction]" to instruct the Worker, or "DONE" to finish.',
+      'correction'
+    );
+
+    if (!correctedResponse) {
+      return null;
+    }
+
+    if (correctedResponse.needsCorrection) {
+      Display.warning('⚠️  Still no valid instruction or DONE. Returning to user input...');
+      Display.newline();
+      return null;
+    }
+
+    if (correctedResponse.instruction.length === 0 && correctedResponse.shouldContinue) {
+      Display.warning('⚠️  No instruction to send to Worker. Returning to user input...');
+      Display.newline();
+      return null;
+    }
+
+    return correctedResponse;
+  }
+
+  private async callWorker(instruction: string, model: string): Promise<string> {
+    Display.header(InstanceType.WORKER, `Processing Instruction (Model: ${model})`);
+    Display.system('Instruction from Instructor:');
+    Display.system(Display.truncate(instruction));
+    Display.newline();
+
+    let workerTextBuffer = '';
+    let lastTokenTime = Date.now();
+    const TIMEOUT_MS = 60000;
+    let workerTimedOut = false;
+
+    this.currentAbortController = new AbortController();
+
+    const timeoutCheckInterval = setInterval(() => {
+      const timeSinceLastToken = Date.now() - lastTokenTime;
+      if (timeSinceLastToken > TIMEOUT_MS) {
+        workerTimedOut = true;
+        console.log(`[Timeout] Worker inactive for ${Math.floor(timeSinceLastToken / 1000)}s, aborting...`);
+        if (this.currentAbortController) {
+          this.currentAbortController.abort();
+        }
+        clearInterval(timeoutCheckInterval);
+      }
+    }, 1000);
+
+    try {
+      const workerResponse = await this.worker.processInstruction(
+        instruction,
+        model,
+        (chunk) => {
+          if (this.interrupted) return;
+          lastTokenTime = Date.now();
+          if (workerTextBuffer === '') {
+            Display.system('Response:');
+          }
+          workerTextBuffer += chunk;
+          Display.text(InstanceType.WORKER, chunk);
+        },
+        this.currentAbortController.signal
+      );
+
+      clearInterval(timeoutCheckInterval);
+      Display.newline();
+
+      if (this.interrupted) {
+        this.paused = false;
+        throw new Error('Interrupted');
+      }
+
+      return workerResponse;
+    } catch (error: any) {
+      clearInterval(timeoutCheckInterval);
+
+      if (workerTimedOut && (error.name === 'AbortError' || error.message?.includes('aborted'))) {
+        Display.newline();
+        Display.system('⏱️  Worker response timed out after 60s of inactivity');
+        Display.newline();
+        return workerTextBuffer ? `${workerTextBuffer} [TIMEOUT after 60s]` : '[No response received - TIMEOUT after 60s]';
+      }
+
+      throw error;
+    } finally {
+      this.currentAbortController = null;
+    }
   }
 
   async run(initialInstruction?: string): Promise<void> {
@@ -116,175 +323,46 @@ export class Orchestrator {
 
     try {
       let instructorResponse: any = null;
-      let continueSession = true;
       let isFirstRun = true;
 
-      // Outer loop: keep the session alive until user exits
-      while (continueSession) {
-        // If no active instruction, wait for user input
-        if (!instructorResponse || !instructorResponse.shouldContinue) {
+      // Main session loop
+      while (true) {
+        // Step 1: Get user instruction if needed
+        if (!instructorResponse?.shouldContinue) {
           if (instructorResponse) {
             Display.success('Instructor has completed the current task');
           }
 
-          let userInstruction: string | null;
+          const userInstruction = isFirstRun && initialInstruction
+            ? initialInstruction
+            : await this.waitForUserInput();
 
-          // Use initial instruction on first run if provided
-          if (isFirstRun && initialInstruction) {
-            userInstruction = initialInstruction;
-            isFirstRun = false;
-          } else {
-            userInstruction = await this.waitForUserInput();
-          }
+          isFirstRun = false;
 
           if (!userInstruction) {
             Display.info('Session ended by user');
             break;
           }
 
-          // Initial instruction to Instructor
+          // Step 2: Process user instruction with Instructor
           this.currentRound++;
           Display.round(this.currentRound, this.config.maxRounds);
           Display.header(InstanceType.INSTRUCTOR, 'Processing User Instruction');
           Display.system('User Instruction: ' + userInstruction);
 
-          let thinkingBuffer = '';
-          let textBuffer = '';
+          instructorResponse = await this.callInstructor(userInstruction, 'user-input');
+          if (!instructorResponse) continue;
 
-          // Create AbortController for this streaming operation
-          this.currentAbortController = new AbortController();
+          // Step 3: Handle correction if needed
+          instructorResponse = await this.handleNeedsCorrection(instructorResponse);
+          if (!instructorResponse) continue;
 
-          try {
-            instructorResponse = await this.instructor.processUserInput(
-              userInstruction,
-              (chunk) => {
-                if (this.interrupted) return; // Stop processing if interrupted
-                if (thinkingBuffer === '') {
-                  Display.newline();
-                  Display.system('Thinking...');
-                }
-                thinkingBuffer += chunk;
-                Display.thinking(chunk);
-              },
-              (chunk) => {
-                if (this.interrupted) return; // Stop processing if interrupted
-                if (thinkingBuffer && textBuffer === '') {
-                  Display.newline();
-                  Display.system('Response:');
-                }
-                textBuffer += chunk;
-                Display.text(InstanceType.INSTRUCTOR, chunk);
-              },
-              this.currentAbortController.signal
-            );
-          } catch (error: any) {
-            // If aborted, treat it as an interruption
-            if (error.name === 'AbortError' || error.message?.includes('aborted')) {
-              // Interruption already handled
-            } else {
-              throw error; // Re-throw other errors
-            }
-          } finally {
-            this.currentAbortController = null;
-          }
-
-          Display.newline();
-
-          // Print debug status
-          Display.instructorStatus(
-            instructorResponse.workerModel || this.config.workerModel,
-            instructorResponse.shouldContinue,
-            instructorResponse.needsCorrection || false
-          );
-
-          // If interrupted, break out and wait for new instruction
-          if (this.interrupted) {
-            this.paused = false;
-            continue;
-          }
-
-          // If Instructor needs correction (didn't use "tell worker" or "DONE")
-          if (instructorResponse.needsCorrection) {
-            Display.warning('⚠️  Instructor did not use the correct communication format.');
-            Display.system('   To communicate with Worker, use: "Tell worker: [instruction]"');
-            Display.system('   To finish the task, respond with: "DONE"');
-            Display.newline();
-
-            // Prompt Instructor to continue with correction
-            this.currentRound++;
-            Display.round(this.currentRound, this.config.maxRounds);
-            Display.header(InstanceType.INSTRUCTOR, 'Please provide instruction or DONE');
-
-            let thinkingBuffer = '';
-            let textBuffer = '';
-
-            this.currentAbortController = new AbortController();
-
-            try {
-              instructorResponse = await this.instructor.processUserInput(
-                'Please continue. Remember to use "Tell worker: [instruction]" to instruct the Worker, or "DONE" to finish.',
-                (chunk) => {
-                  if (this.interrupted) return;
-                  if (thinkingBuffer === '') {
-                    Display.newline();
-                    Display.system('Thinking...');
-                  }
-                  thinkingBuffer += chunk;
-                  Display.thinking(chunk);
-                },
-                (chunk) => {
-                  if (this.interrupted) return;
-                  if (thinkingBuffer && textBuffer === '') {
-                    Display.newline();
-                    Display.system('Response:');
-                  }
-                  textBuffer += chunk;
-                  Display.text(InstanceType.INSTRUCTOR, chunk);
-                },
-                this.currentAbortController.signal
-              );
-            } catch (error: any) {
-              if (error.name === 'AbortError' || error.message?.includes('aborted')) {
-                // Interruption already handled
-              } else {
-                throw error;
-              }
-            } finally {
-              this.currentAbortController = null;
-            }
-
-            Display.newline();
-
-            // Print debug status after correction
-            Display.instructorStatus(
-              instructorResponse.workerModel || this.config.workerModel,
-              instructorResponse.shouldContinue,
-              instructorResponse.needsCorrection || false
-            );
-
-            // If interrupted after correction prompt, break out
-            if (this.interrupted) {
-              this.paused = false;
-              continue;
-            }
-
-            // After correction, re-check if we should continue
-            if (!instructorResponse.shouldContinue) {
-              continue;
-            }
-          }
-
-          // If Instructor doesn't want to continue, loop back to wait for next user input
-          if (!instructorResponse.shouldContinue) {
-            continue;
-          }
+          // Check if done after correction
+          if (!instructorResponse.shouldContinue) continue;
         }
 
-        // Main conversation loop between Instructor and Worker
-        let continueConversation = true;
-        let currentWorkerModel = instructorResponse.workerModel || this.config.workerModel;
-
-        while (continueConversation && instructorResponse.shouldContinue) {
+        // Step 4: Worker-Instructor conversation loop
+        while (instructorResponse?.shouldContinue && instructorResponse?.instruction) {
           // Check round limit
           if (this.config.maxRounds && this.currentRound > this.config.maxRounds) {
             Display.error(`Maximum rounds (${this.config.maxRounds}) reached. Stopping.`);
@@ -292,196 +370,41 @@ export class Orchestrator {
             break;
           }
 
-          // Worker processes instruction
-          Display.header(InstanceType.WORKER, `Processing Instruction (Model: ${currentWorkerModel})`);
-          Display.system('Instruction from Instructor:');
-          Display.system(Display.truncate(instructorResponse.instruction));
-          Display.newline();
-
-          let workerTextBuffer = '';
-
-          // Create AbortController for this streaming operation
-          this.currentAbortController = new AbortController();
-
-          // Timeout detection: track last token time
-          let lastTokenTime = Date.now();
-          const TIMEOUT_MS = 60000; // 60 seconds
-          let workerTimedOut = false;
-
-          // Start timeout check interval
-          const timeoutCheckInterval = setInterval(() => {
-            const timeSinceLastToken = Date.now() - lastTokenTime;
-            if (timeSinceLastToken > TIMEOUT_MS) {
-              workerTimedOut = true;
-
-              // Simple console notification
-              console.log(`[Timeout] Worker inactive for ${Math.floor(timeSinceLastToken / 1000)}s, aborting...`);
-
-              if (this.currentAbortController) {
-                this.currentAbortController.abort();
-              }
-              clearInterval(timeoutCheckInterval);
-            }
-          }, 1000); // Check every second
-
+          // Call Worker
+          let workerResponse: string;
           try {
-            const workerResponse = await this.worker.processInstruction(
+            workerResponse = await this.callWorker(
               instructorResponse.instruction,
-              currentWorkerModel,
-              (chunk) => {
-                if (this.interrupted) return; // Stop processing if interrupted
-                lastTokenTime = Date.now(); // Update last token time
-                if (workerTextBuffer === '') {
-                  Display.system('Response:');
-                }
-                workerTextBuffer += chunk;
-                Display.text(InstanceType.WORKER, chunk);
-              },
-              this.currentAbortController.signal
+              instructorResponse.workerModel || this.config.workerModel
             );
-
-            // Clear the timeout interval
-            clearInterval(timeoutCheckInterval);
-
-            Display.newline();
-
-            // If interrupted, break out of conversation loop
-            if (this.interrupted) {
-              this.paused = false;
-              instructorResponse.shouldContinue = false;
-              break;
-            }
-
-            // Instructor reviews worker response
-            this.currentRound++;
-            Display.round(this.currentRound, this.config.maxRounds);
-            Display.header(InstanceType.INSTRUCTOR, 'Reviewing Worker Response');
-
-            let thinkingBuffer = '';
-            let textBuffer = '';
-
-            // Create new AbortController for instructor review
-            this.currentAbortController = new AbortController();
-
-            const nextInstructorResponse = await this.instructor.processWorkerResponse(
-              workerResponse,
-              (chunk) => {
-                if (this.interrupted) return; // Stop processing if interrupted
-                if (thinkingBuffer === '') {
-                  Display.newline();
-                  Display.system('Thinking...');
-                }
-                thinkingBuffer += chunk;
-                Display.thinking(chunk);
-              },
-              (chunk) => {
-                if (this.interrupted) return; // Stop processing if interrupted
-                if (thinkingBuffer && textBuffer === '') {
-                  Display.newline();
-                  Display.system('Response:');
-                }
-                textBuffer += chunk;
-                Display.text(InstanceType.INSTRUCTOR, chunk);
-              },
-              this.currentAbortController.signal
-            );
-
-            Display.newline();
-
-            // Print debug status after reviewing Worker response
-            Display.instructorStatus(
-              nextInstructorResponse.workerModel || this.config.workerModel,
-              nextInstructorResponse.shouldContinue,
-              nextInstructorResponse.needsCorrection || false
-            );
-
-            // If interrupted, break out of conversation loop
-            if (this.interrupted) {
-              this.paused = false;
-              instructorResponse.shouldContinue = false;
-              break;
-            }
-
-            instructorResponse = nextInstructorResponse;
-            currentWorkerModel = nextInstructorResponse.workerModel || this.config.workerModel;
-            continueConversation = nextInstructorResponse.shouldContinue;
           } catch (error: any) {
-            // Clear the timeout interval
-            clearInterval(timeoutCheckInterval);
-
-            // If aborted due to timeout
-            if (workerTimedOut && (error.name === 'AbortError' || error.message?.includes('aborted'))) {
-              Display.newline();
-              Display.system('⏱️  Worker response timed out after 60s of inactivity');
-              Display.newline();
-
-              // Pass timeout message to Instructor
-              // Note: processWorkerResponse will prepend "Worker says:" automatically
-              const timeoutMessage = workerTextBuffer
-                ? `${workerTextBuffer} [TIMEOUT after 60s]`
-                : '[No response received - TIMEOUT after 60s]';
-
-              this.currentRound++;
-              Display.round(this.currentRound, this.config.maxRounds);
-              Display.header(InstanceType.INSTRUCTOR, 'Reviewing Timeout Response');
-
-              let thinkingBuffer = '';
-              let textBuffer = '';
-
-              this.currentAbortController = new AbortController();
-
-              const nextInstructorResponse = await this.instructor.processWorkerResponse(
-                timeoutMessage,
-                (chunk) => {
-                  if (this.interrupted) return;
-                  if (thinkingBuffer === '') {
-                    Display.newline();
-                    Display.system('Thinking...');
-                  }
-                  thinkingBuffer += chunk;
-                  Display.thinking(chunk);
-                },
-                (chunk) => {
-                  if (this.interrupted) return;
-                  if (thinkingBuffer && textBuffer === '') {
-                    Display.newline();
-                    Display.system('Response:');
-                  }
-                  textBuffer += chunk;
-                  Display.text(InstanceType.INSTRUCTOR, chunk);
-                },
-                this.currentAbortController.signal
-              );
-
-              Display.newline();
-
-              // Print debug status after timeout response
-              Display.instructorStatus(
-                nextInstructorResponse.workerModel || this.config.workerModel,
-                nextInstructorResponse.shouldContinue,
-                nextInstructorResponse.needsCorrection || false
-              );
-
-              instructorResponse = nextInstructorResponse;
-              currentWorkerModel = nextInstructorResponse.workerModel || this.config.workerModel;
-              continueConversation = nextInstructorResponse.shouldContinue;
-            }
-            // If aborted by user interruption
-            else if (error.name === 'AbortError' || error.message?.includes('aborted')) {
-              this.paused = false;
-              instructorResponse.shouldContinue = false;
+            if (error.message === 'Interrupted') {
+              instructorResponse = null;
               break;
-            } else {
-              throw error; // Re-throw other errors
             }
-          } finally {
-            this.currentAbortController = null;
+            const action = this.handleApiError(error);
+            if (action === 'throw') throw error;
+            instructorResponse.shouldContinue = false;
+            break;
           }
+
+          // Instructor reviews Worker response
+          this.currentRound++;
+          Display.round(this.currentRound, this.config.maxRounds);
+          Display.header(InstanceType.INSTRUCTOR, 'Reviewing Worker Response');
+
+          instructorResponse = await this.callInstructor(workerResponse, 'worker-response');
+          if (!instructorResponse) break;
         }
       }
-
     } catch (error) {
-      Display.error(`Orchestration failed: ${error instanceof Error ? error.message : String(error)}`);
+      if (error instanceof Error && error.message?.includes('EIO')) {
+        Display.error(`Terminal I/O error: ${error.message}`);
+        Display.system('   This usually happens when the terminal is disconnected or stdin is redirected.');
+        Display.system('   The application will now exit.');
+      } else {
+        Display.error(`Orchestration failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
       throw error;
     } finally {
       this.cleanup();

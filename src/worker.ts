@@ -9,6 +9,38 @@ export class WorkerManager {
   private systemPrompt: string;
   private toolExecutor: ToolExecutor;
 
+  /**
+   * Sanitize response content blocks to remove streaming-specific fields
+   * that should not be included in conversation history
+   */
+  private sanitizeContent(content: any[]): any[] {
+    const cleaned = content.map(block => {
+      if (block.type === 'tool_use') {
+        // Remove partial_json and other streaming-specific fields
+        const { partial_json, ...cleanBlock } = block;
+        // Ensure input exists even if partial_json wasn't fully parsed
+        if (!cleanBlock.input) {
+          cleanBlock.input = {};
+        }
+        return cleanBlock;
+      }
+      return block;
+    }).filter(block => {
+      // Filter out empty text blocks
+      if (block.type === 'text') {
+        return block.text && block.text.trim().length > 0;
+      }
+      return true;
+    });
+
+    // Ensure we have at least some content
+    if (cleaned.length === 0) {
+      throw new Error('Cannot add message with empty content to conversation history');
+    }
+
+    return cleaned;
+  }
+
   constructor(config: Config, workDir: string) {
     this.client = new ClaudeClient(config);
     // Pass allowed tool names to ToolExecutor
@@ -26,6 +58,11 @@ export class WorkerManager {
     onTextChunk?: (chunk: string) => void,
     abortSignal?: AbortSignal
   ): Promise<string> {
+    // Validate instruction is not empty
+    if (!instruction || instruction.trim().length === 0) {
+      throw new Error('Cannot process empty instruction');
+    }
+
     this.conversationHistory.push({
       role: 'user',
       content: instruction,
@@ -66,7 +103,7 @@ export class WorkerManager {
 
         this.conversationHistory.push({
           role: 'assistant',
-          content: response.content,
+          content: this.sanitizeContent(response.content),
         });
 
         break;
@@ -82,7 +119,7 @@ export class WorkerManager {
       // Add assistant message with tool uses to history
       this.conversationHistory.push({
         role: 'assistant',
-        content: response.content,
+        content: this.sanitizeContent(response.content),
       });
 
       // Add user message with tool results to history
