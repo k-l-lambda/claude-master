@@ -264,9 +264,13 @@ export class ToolExecutor {
         cwd: this.workDir,
         encoding: 'utf-8',
         maxBuffer: 10 * 1024 * 1024,
+        timeout: 30000, // 30 seconds timeout
       });
       return result || 'Command executed successfully';
     } catch (error: any) {
+      if (error.killed && error.signal === 'SIGTERM') {
+        throw new Error(`Git command timed out after 30 seconds: git ${command}`);
+      }
       throw new Error(`Git command failed: ${error.message}`);
     }
   }
@@ -287,9 +291,13 @@ export class ToolExecutor {
         cwd: this.workDir,
         encoding: 'utf-8',
         maxBuffer: 10 * 1024 * 1024,
+        timeout: 30000, // 30 seconds timeout
       });
       return result || 'Command executed successfully';
     } catch (error: any) {
+      if (error.killed && error.signal === 'SIGTERM') {
+        throw new Error(`Bash command timed out after 30 seconds: ${command}`);
+      }
       throw new Error(`Bash command failed: ${error.message}`);
     }
   }
