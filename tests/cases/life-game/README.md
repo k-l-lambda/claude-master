@@ -32,6 +32,8 @@ Available models for Worker:
 
 When the task is complete, respond with `DONE` to end the session.
 
+Fine-dividing your tasks for Worker for every round. Worker may encounter timeout if no response in 60s.
+
 ---
 
 ## Your Task

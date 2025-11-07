@@ -298,7 +298,7 @@ export class Orchestrator {
       Display.header(InstanceType.INSTRUCTOR, `Correction Attempt ${attempt}/${maxCorrectionAttempts}`);
 
       correctedResponse = await this.callInstructor(
-        'Please continue. Remember to use "Tell worker: [instruction]" to instruct the Worker, or "DONE" to finish.',
+        'Please continue. You should work with *Worker* agent if you cannot finish the task by 1 round. Remember to use "Tell worker: [instruction]" to instruct the Worker, or "DONE" to finish.',
         'correction'
       );
 
