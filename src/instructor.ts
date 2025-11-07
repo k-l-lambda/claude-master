@@ -141,7 +141,8 @@ You can specify which model the Worker should use by including:
             onTextChunk(chunk);
           }
         },
-        abortSignal
+        abortSignal,
+        'instructor'
       );
 
       // Extract thinking

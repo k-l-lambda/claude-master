@@ -73,26 +73,47 @@ export class Orchestrator {
       }
     }
 
-    const userInput = await new Promise<string>((resolve) => {
-      this.rl.question('Input your instruction:\n> ', (answer) => {
-        resolve(answer);
+    try {
+      const userInput = await new Promise<string>((resolve, reject) => {
+        // Check if readline is still open
+        if (this.rl.closed) {
+          reject(new Error('Input stream closed'));
+          return;
+        }
+
+        this.rl.question('Input your instruction:\n> ', (answer) => {
+          resolve(answer);
+        });
+
+        // Handle close event
+        const closeHandler = () => {
+          reject(new Error('Input stream closed'));
+        };
+        this.rl.once('close', closeHandler);
       });
-    });
 
-    if (process.stdin.isTTY) {
-      try {
-        process.stdin.setRawMode(true);
-      } catch (error) {
-        // Ignore
+      if (process.stdin.isTTY) {
+        try {
+          process.stdin.setRawMode(true);
+        } catch (error) {
+          // Ignore
+        }
       }
-    }
 
-    const trimmed = userInput.trim();
-    if (trimmed.toLowerCase() === 'exit' || trimmed.toLowerCase() === 'quit') {
-      return null;
-    }
+      const trimmed = userInput.trim();
+      if (trimmed.toLowerCase() === 'exit' || trimmed.toLowerCase() === 'quit') {
+        return null;
+      }
 
-    return trimmed || null;
+      return trimmed || null;
+    } catch (error: any) {
+      // If readline was closed (e.g., piped input ended), treat as exit
+      if (error.message?.includes('closed')) {
+        Display.info('Input stream closed');
+        return null;
+      }
+      throw error;
+    }
   }
 
   private cleanup(): void {
@@ -208,41 +229,72 @@ export class Orchestrator {
   }
 
   private async handleNeedsCorrection(response: any): Promise<any | null> {
+    // Debug logging
+    console.log('[DEBUG] handleNeedsCorrection called');
+    console.log('[DEBUG] response:', JSON.stringify({
+      needsCorrection: response?.needsCorrection,
+      shouldContinue: response?.shouldContinue,
+      instruction: response?.instruction
+    }));
+
     if (!response?.needsCorrection) {
+      console.log('[DEBUG] needsCorrection is false/undefined, returning response');
       return response;
     }
 
+    console.log('[DEBUG] needsCorrection is true, showing warning');
     Display.warning('⚠️  Instructor did not use the correct communication format.');
     Display.system('   To communicate with Worker, use: "Tell worker: [instruction]"');
     Display.system('   To finish the task, respond with: "DONE"');
     Display.newline();
 
-    this.currentRound++;
-    Display.round(this.currentRound, this.config.maxRounds);
-    Display.header(InstanceType.INSTRUCTOR, 'Please provide instruction or DONE');
+    // Try correction up to 3 times
+    const maxCorrectionAttempts = 3;
+    let correctedResponse: any = null;
 
-    const correctedResponse = await this.callInstructor(
-      'Please continue. Remember to use "Tell worker: [instruction]" to instruct the Worker, or "DONE" to finish.',
-      'correction'
-    );
+    for (let attempt = 1; attempt <= maxCorrectionAttempts; attempt++) {
+      this.currentRound++;
+      Display.round(this.currentRound, this.config.maxRounds);
+      Display.header(InstanceType.INSTRUCTOR, `Correction Attempt ${attempt}/${maxCorrectionAttempts}`);
 
-    if (!correctedResponse) {
-      return null;
+      correctedResponse = await this.callInstructor(
+        'Please continue. Remember to use "Tell worker: [instruction]" to instruct the Worker, or "DONE" to finish.',
+        'correction'
+      );
+
+      if (!correctedResponse) {
+        // Abort signal or error
+        return null;
+      }
+
+      // Check if correction succeeded
+      if (!correctedResponse.needsCorrection) {
+        // Success! Check if we have valid content
+        if (correctedResponse.instruction.length > 0 || !correctedResponse.shouldContinue) {
+          Display.success(`✓ Correction successful on attempt ${attempt}`);
+          Display.newline();
+          return correctedResponse;
+        }
+      }
+
+      // Still has issues, show warning and try again
+      if (attempt < maxCorrectionAttempts) {
+        Display.warning(`⚠️  Attempt ${attempt} failed. Trying again...`);
+        Display.newline();
+      }
     }
 
-    if (correctedResponse.needsCorrection) {
-      Display.warning('⚠️  Still no valid instruction or DONE. Returning to user input...');
-      Display.newline();
-      return null;
-    }
+    // All correction attempts failed - force DONE to prevent infinite loop
+    Display.warning('⚠️  All correction attempts failed. Marking task as complete.');
+    Display.newline();
 
-    if (correctedResponse.instruction.length === 0 && correctedResponse.shouldContinue) {
-      Display.warning('⚠️  No instruction to send to Worker. Returning to user input...');
-      Display.newline();
-      return null;
-    }
-
-    return correctedResponse;
+    return {
+      thinking: '',
+      instruction: '',
+      workerModel: response.workerModel,
+      shouldContinue: false, // Force stop instead of waiting for user
+      needsCorrection: false,
+    };
   }
 
   private async callWorker(instruction: string, model: string): Promise<string> {
@@ -327,7 +379,7 @@ export class Orchestrator {
 
       // Main session loop
       while (true) {
-        // Step 1: Get user instruction if needed
+        // Step 1: Get user instruction if needed (when no active response or done)
         if (!instructorResponse?.shouldContinue) {
           if (instructorResponse) {
             Display.success('Instructor has completed the current task');
@@ -352,13 +404,25 @@ export class Orchestrator {
 
           instructorResponse = await this.callInstructor(userInstruction, 'user-input');
           if (!instructorResponse) continue;
+        }
 
-          // Step 3: Handle correction if needed
+        // Step 3: Handle correction if needed (IMPORTANT: Check this every loop iteration)
+        if (instructorResponse?.needsCorrection) {
           instructorResponse = await this.handleNeedsCorrection(instructorResponse);
           if (!instructorResponse) continue;
+        }
 
-          // Check if done after correction
-          if (!instructorResponse.shouldContinue) continue;
+        // Check if done after correction
+        if (!instructorResponse?.shouldContinue) {
+          continue;
+        }
+
+        // Validate we have an instruction before proceeding
+        if (!instructorResponse?.instruction || instructorResponse.instruction.length === 0) {
+          Display.warning('⚠️  No instruction to send to Worker. Returning to user input...');
+          Display.newline();
+          instructorResponse = null;
+          continue;
         }
 
         // Step 4: Worker-Instructor conversation loop
@@ -395,6 +459,11 @@ export class Orchestrator {
 
           instructorResponse = await this.callInstructor(workerResponse, 'worker-response');
           if (!instructorResponse) break;
+
+          // Check for needsCorrection after Worker review
+          if (instructorResponse.needsCorrection) {
+            break; // Break inner loop to handle correction in outer loop
+          }
         }
       }
     } catch (error) {

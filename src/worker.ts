@@ -87,7 +87,8 @@ export class WorkerManager {
             onTextChunk(chunk);
           }
         },
-        abortSignal
+        abortSignal,
+        'worker'
       );
 
       // Check if there are any tool uses

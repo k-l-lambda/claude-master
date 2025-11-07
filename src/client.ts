@@ -17,8 +17,11 @@ export class ClaudeClient {
   /**
    * Generate mock response for debug mode
    */
-  private generateMockResponse(model: string, useThinking: boolean): Anthropic.Message {
-    const responses = [
+  private generateMockResponse(model: string, useThinking: boolean, context?: 'instructor' | 'worker'): Anthropic.Message {
+    // Determine if this is for Worker - Worker responses should never have "Tell worker:" or "DONE"
+    const isWorker = context === 'worker';
+
+    const instructorResponses = [
       // Correct format - with "Tell worker"
       {
         weight: 3,
@@ -55,6 +58,31 @@ export class ClaudeClient {
         text: 'Here\'s how to run it:\n```bash\nnpm start\n```\n\nDONE!'
       },
     ];
+
+    const workerResponses = [
+      {
+        weight: 3,
+        text: 'I\'ve implemented the feature as requested. The code is working correctly.'
+      },
+      {
+        weight: 3,
+        text: 'The function has been created. Here\'s what I did:\n\n```typescript\nfunction solve() {\n  // Implementation\n  return result;\n}\n```\n\nAll tests are passing.'
+      },
+      {
+        weight: 2,
+        text: 'Task completed successfully. I\'ve added the requested functionality and verified it works as expected.'
+      },
+      {
+        weight: 2,
+        text: 'Implementation complete. The feature is ready and I\'ve tested it with various inputs.'
+      },
+      {
+        weight: 1,
+        text: 'Done! The changes have been implemented and are working correctly.'
+      },
+    ];
+
+    const responses = isWorker ? workerResponses : instructorResponses;
 
     // Weighted random selection
     const totalWeight = responses.reduce((sum, r) => sum + r.weight, 0);
@@ -109,9 +137,10 @@ export class ClaudeClient {
   private async streamMockResponse(
     model: string,
     useThinking: boolean,
-    onChunk?: (chunk: string, type: 'thinking' | 'text') => void
+    onChunk?: (chunk: string, type: 'thinking' | 'text') => void,
+    context?: 'instructor' | 'worker'
   ): Promise<Anthropic.Message> {
-    const response = this.generateMockResponse(model, useThinking);
+    const response = this.generateMockResponse(model, useThinking, context);
 
     // Simulate streaming delay
     const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -175,12 +204,13 @@ export class ClaudeClient {
     tools?: Tool[],
     useThinking: boolean = false,
     onChunk?: (chunk: string, type: 'thinking' | 'text') => void,
-    abortSignal?: AbortSignal
+    abortSignal?: AbortSignal,
+    context?: 'instructor' | 'worker'
   ): Promise<Anthropic.Message> {
     // Debug mode: return mock response
     if (this.config.debugMode) {
       console.log('[DEBUG MODE] Generating mock response instead of calling API');
-      return await this.streamMockResponse(model, useThinking, onChunk);
+      return await this.streamMockResponse(model, useThinking, onChunk, context);
     }
 
     const params: Anthropic.MessageCreateParams = {
