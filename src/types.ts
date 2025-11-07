@@ -8,6 +8,7 @@ export interface Config {
   workerModel: string;
   maxRounds?: number;
   useThinking?: boolean;  // Control whether to use thinking feature
+  debugMode?: boolean;    // Enable mock responses for testing
 }
 
 export interface Message {

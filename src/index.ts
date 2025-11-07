@@ -35,6 +35,7 @@ program
   .option('-k, --api-key <key>', 'Anthropic API key (or use ANTHROPIC_AUTH_TOKEN env var or .env.local)')
   .option('-u, --base-url <url>', 'API base URL (or use ANTHROPIC_BASE_URL env var or .env.local)')
   .option('--no-thinking', 'Disable thinking feature for Instructor (use this if your API/proxy does not support thinking)')
+  .option('--debug', 'Enable debug mode with mock API responses (for testing orchestrator logic)')
   .action(async (instruction, options) => {
     try {
       // Change to work directory if specified
@@ -55,9 +56,10 @@ program
         || process.env.ANTHROPIC_API_KEY
         || undefined;
 
-      // Validate that at least one is provided
-      if (!authToken && !apiKey) {
+      // In debug mode, API key is not required
+      if (!options.debug && !authToken && !apiKey) {
         Display.error('Auth token or API key is required. Set ANTHROPIC_AUTH_TOKEN in .env.local, environment variable, or use --api-key option');
+        Display.info('Or use --debug flag to run in debug mode without API calls');
         process.exit(1);
       }
 
@@ -73,7 +75,16 @@ program
         workerModel: options.workerModel,
         maxRounds: options.maxRounds,
         useThinking: options.thinking !== false, // Default to true, but can be disabled with --no-thinking
+        debugMode: options.debug || false, // Enable debug mode if --debug flag is present
       };
+
+      // Show debug mode warning
+      if (config.debugMode) {
+        Display.warning('⚙️  DEBUG MODE ENABLED');
+        Display.system('   Using mock API responses instead of real Claude API');
+        Display.system('   This is for testing orchestrator logic only');
+        Display.newline();
+      }
 
       // Create and run orchestrator
       const orchestrator = new Orchestrator(config, workDir);

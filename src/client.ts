@@ -14,6 +14,129 @@ export class ClaudeClient {
     });
   }
 
+  /**
+   * Generate mock response for debug mode
+   */
+  private generateMockResponse(model: string, useThinking: boolean): Anthropic.Message {
+    const responses = [
+      // Correct format - with "Tell worker"
+      {
+        weight: 3,
+        text: 'I understand the task. Let me instruct the Worker to proceed.\n\nTell worker: Please implement the requested feature.'
+      },
+      {
+        weight: 3,
+        text: 'Let me analyze this. The Worker should handle the implementation.\n\nTell worker: Create a function to solve this problem.'
+      },
+      {
+        weight: 0.1,
+        text: 'This looks good. The task is complete.\n\nDONE.\n'
+      },
+      {
+        weight: 0.1,
+        text: 'All requirements have been satisfied.\n\n**DONE**'
+      },
+      // Incorrect format - needs correction
+      {
+        weight: 2,
+        text: 'I think we should implement this feature using TypeScript. It would be better for type safety.'
+      },
+      {
+        weight: 2,
+        text: 'This is a good approach. Let me think about how to proceed with the implementation.'
+      },
+      {
+        weight: 1,
+        text: 'I\'ve reviewed the code and it looks mostly correct, but there might be some edge cases to consider.'
+      },
+      // With code blocks
+      {
+        weight: 0.1,
+        text: 'Here\'s how to run it:\n```bash\nnpm start\n```\n\nDONE!'
+      },
+    ];
+
+    // Weighted random selection
+    const totalWeight = responses.reduce((sum, r) => sum + r.weight, 0);
+    let random = Math.random() * totalWeight;
+
+    let selectedText = responses[0].text;
+    for (const response of responses) {
+      random -= response.weight;
+      if (random <= 0) {
+        selectedText = response.text;
+        break;
+      }
+    }
+
+    const content: Anthropic.ContentBlock[] = [];
+
+    // Add thinking if requested
+    if (useThinking) {
+      content.push({
+        type: 'thinking',
+        thinking: 'Mock thinking: Analyzing the request and determining the appropriate response format.',
+      } as any);
+    }
+
+    // Add text content
+    content.push({
+      type: 'text',
+      text: selectedText,
+      citations: [],
+    });
+
+    return {
+      id: 'mock-msg-' + Date.now(),
+      type: 'message',
+      role: 'assistant',
+      content,
+      model,
+      stop_reason: 'end_turn',
+      stop_sequence: null,
+      usage: {
+        input_tokens: 100,
+        output_tokens: 50,
+        cache_creation_input_tokens: 0,
+        cache_read_input_tokens: 0,
+      } as any,
+    };
+  }
+
+  /**
+   * Simulate streaming for mock response
+   */
+  private async streamMockResponse(
+    model: string,
+    useThinking: boolean,
+    onChunk?: (chunk: string, type: 'thinking' | 'text') => void
+  ): Promise<Anthropic.Message> {
+    const response = this.generateMockResponse(model, useThinking);
+
+    // Simulate streaming delay
+    const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+    for (const block of response.content) {
+      if (block.type === 'thinking' && onChunk) {
+        const thinking = (block as any).thinking || '';
+        // Stream thinking in chunks
+        for (let i = 0; i < thinking.length; i += 10) {
+          await delay(20);
+          onChunk(thinking.slice(i, i + 10), 'thinking');
+        }
+      } else if (block.type === 'text' && onChunk) {
+        const text = block.text;
+        // Stream text in chunks
+        for (let i = 0; i < text.length; i += 5) {
+          await delay(30);
+          onChunk(text.slice(i, i + 5), 'text');
+        }
+      }
+    }
+
+    return response;
+  }
+
   async sendMessage(
     messages: Message[],
     model: string,
@@ -54,6 +177,12 @@ export class ClaudeClient {
     onChunk?: (chunk: string, type: 'thinking' | 'text') => void,
     abortSignal?: AbortSignal
   ): Promise<Anthropic.Message> {
+    // Debug mode: return mock response
+    if (this.config.debugMode) {
+      console.log('[DEBUG MODE] Generating mock response instead of calling API');
+      return await this.streamMockResponse(model, useThinking, onChunk);
+    }
+
     const params: Anthropic.MessageCreateParams = {
       model,
       max_tokens: 8192,
