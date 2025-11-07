@@ -41,15 +41,15 @@ export class ClaudeClient {
       },
       // Incorrect format - needs correction
       {
-        weight: 2,
+        weight: 0.5,
         text: 'I think we should implement this feature using TypeScript. It would be better for type safety.'
       },
       {
-        weight: 2,
+        weight: 0.5,
         text: 'This is a good approach. Let me think about how to proceed with the implementation.'
       },
       {
-        weight: 1,
+        weight: 0.5,
         text: 'I\'ve reviewed the code and it looks mostly correct, but there might be some edge cases to consider.'
       },
       // With code blocks

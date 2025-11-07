@@ -33,9 +33,14 @@ export class Display {
     console.log('\n' + this.SYSTEM_COLOR('│ ' + message));
   }
 
-  static round(current: number, max?: number): void {
-    const maxStr = max ? `/${max}` : '';
-    console.log('\n' + this.SYSTEM_COLOR(`╭─ Round ${current}${maxStr} ─╮`));
+  static round(current: number, remainingOrMax?: number | string): void {
+    let suffix = '';
+    if (typeof remainingOrMax === 'number') {
+      suffix = ` (${remainingOrMax} left)`;
+    } else if (typeof remainingOrMax === 'string') {
+      suffix = ` ${remainingOrMax}`;
+    }
+    console.log('\n' + this.SYSTEM_COLOR(`╭─ Round ${current}${suffix} ─╮`));
   }
 
   static error(message: string): void {

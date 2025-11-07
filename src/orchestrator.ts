@@ -9,6 +9,7 @@ export class Orchestrator {
   private worker: WorkerManager;
   private config: Config;
   private currentRound: number = 0;
+  private remainingRounds: number;
   private paused: boolean = false;
   private interrupted: boolean = false;
   private currentAbortController: AbortController | null = null;
@@ -16,6 +17,7 @@ export class Orchestrator {
 
   constructor(config: Config, workDir: string) {
     this.config = config;
+    this.remainingRounds = config.maxRounds || Infinity;
     this.instructor = new InstructorManager(config, '', workDir);
     this.worker = new WorkerManager(config, workDir);
     this.instructor.setWorkerToolExecutor(this.worker.getToolExecutor());
@@ -125,6 +127,44 @@ export class Orchestrator {
       }
     }
     this.rl.close();
+  }
+
+  /**
+   * Parse and handle round control commands in user input
+   * Control commands MUST appear at the beginning of input
+   * Supports: [r+n] to add n rounds, [r=n] to set remaining rounds to n
+   * Returns the cleaned instruction without control commands
+   */
+  private parseRoundControl(input: string): string {
+    let cleanedInput = input;
+    let hasChanges = true;
+
+    // Keep parsing until no more matches at the start
+    while (hasChanges) {
+      hasChanges = false;
+
+      // Match [r+n] at the start (after optional whitespace)
+      const addMatch = cleanedInput.match(/^\s*\[r\+(\d+)\]/i);
+      if (addMatch) {
+        const n = parseInt(addMatch[1], 10);
+        this.remainingRounds = this.remainingRounds === Infinity ? n : this.remainingRounds + n;
+        Display.system(`📊 Added ${n} rounds. Remaining: ${this.remainingRounds === Infinity ? '∞' : this.remainingRounds}`);
+        cleanedInput = cleanedInput.replace(addMatch[0], '');
+        hasChanges = true;
+      }
+
+      // Match [r=n] at the start (after optional whitespace)
+      const setMatch = cleanedInput.match(/^\s*\[r=(\d+)\]/i);
+      if (setMatch) {
+        const n = parseInt(setMatch[1], 10);
+        this.remainingRounds = n;
+        Display.system(`📊 Set remaining rounds to: ${this.remainingRounds}`);
+        cleanedInput = cleanedInput.replace(setMatch[0], '');
+        hasChanges = true;
+      }
+    }
+
+    return cleanedInput.trim();
   }
 
   private handleApiError(error: any): 'continue' | 'break' | 'throw' {
@@ -254,7 +294,7 @@ export class Orchestrator {
 
     for (let attempt = 1; attempt <= maxCorrectionAttempts; attempt++) {
       this.currentRound++;
-      Display.round(this.currentRound, this.config.maxRounds);
+      Display.round(this.currentRound, this.remainingRounds !== Infinity ? this.remainingRounds : undefined);
       Display.header(InstanceType.INSTRUCTOR, `Correction Attempt ${attempt}/${maxCorrectionAttempts}`);
 
       correctedResponse = await this.callInstructor(
@@ -385,7 +425,7 @@ export class Orchestrator {
             Display.success('Instructor has completed the current task');
           }
 
-          const userInstruction = isFirstRun && initialInstruction
+          let userInstruction = isFirstRun && initialInstruction
             ? initialInstruction
             : await this.waitForUserInput();
 
@@ -396,9 +436,19 @@ export class Orchestrator {
             break;
           }
 
+          // Parse round control commands and get cleaned instruction
+          userInstruction = this.parseRoundControl(userInstruction);
+
+          // Check if there's still instruction after parsing controls
+          if (!userInstruction || userInstruction.trim().length === 0) {
+            Display.warning('⚠️  No instruction provided after parsing round controls');
+            Display.newline();
+            continue;
+          }
+
           // Step 2: Process user instruction with Instructor
           this.currentRound++;
-          Display.round(this.currentRound, this.config.maxRounds);
+          Display.round(this.currentRound, this.remainingRounds !== Infinity ? this.remainingRounds : undefined);
           Display.header(InstanceType.INSTRUCTOR, 'Processing User Instruction');
           Display.system('User Instruction: ' + userInstruction);
 
@@ -427,11 +477,18 @@ export class Orchestrator {
 
         // Step 4: Worker-Instructor conversation loop
         while (instructorResponse?.shouldContinue && instructorResponse?.instruction) {
-          // Check round limit
-          if (this.config.maxRounds && this.currentRound > this.config.maxRounds) {
-            Display.error(`Maximum rounds (${this.config.maxRounds}) reached. Stopping.`);
+          // Check remaining rounds
+          if (this.remainingRounds !== Infinity && this.remainingRounds <= 0) {
+            Display.error(`No remaining rounds. Stopping.`);
+            Display.system(`Use [r+n] to add more rounds or [r=n] to set remaining rounds`);
+            Display.newline();
             instructorResponse.shouldContinue = false;
             break;
+          }
+
+          // Decrement remaining rounds before starting Worker round
+          if (this.remainingRounds !== Infinity) {
+            this.remainingRounds--;
           }
 
           // Call Worker
@@ -454,7 +511,7 @@ export class Orchestrator {
 
           // Instructor reviews Worker response
           this.currentRound++;
-          Display.round(this.currentRound, this.config.maxRounds);
+          Display.round(this.currentRound, this.remainingRounds !== Infinity ? this.remainingRounds : undefined);
           Display.header(InstanceType.INSTRUCTOR, 'Reviewing Worker Response');
 
           instructorResponse = await this.callInstructor(workerResponse, 'worker-response');
