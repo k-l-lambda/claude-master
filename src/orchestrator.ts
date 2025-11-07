@@ -269,20 +269,10 @@ export class Orchestrator {
   }
 
   private async handleNeedsCorrection(response: any): Promise<any | null> {
-    // Debug logging
-    console.log('[DEBUG] handleNeedsCorrection called');
-    console.log('[DEBUG] response:', JSON.stringify({
-      needsCorrection: response?.needsCorrection,
-      shouldContinue: response?.shouldContinue,
-      instruction: response?.instruction
-    }));
-
     if (!response?.needsCorrection) {
-      console.log('[DEBUG] needsCorrection is false/undefined, returning response');
       return response;
     }
 
-    console.log('[DEBUG] needsCorrection is true, showing warning');
     Display.warning('⚠️  Instructor did not use the correct communication format.');
     Display.system('   To communicate with Worker, use: "Tell worker: [instruction]"');
     Display.system('   To finish the task, respond with: "DONE"');

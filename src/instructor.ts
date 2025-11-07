@@ -221,19 +221,12 @@ You can specify which model the Worker should use by including:
     const trimmedText = text.trim();
     const lastLine = trimmedText.split('\n').slice(-3).join('\n'); // Check last 3 lines
 
-    // DEBUG: Log the actual content we're checking
-    console.log('\n[DEBUG] Checking DONE detection:');
-    console.log('[DEBUG] Full text length:', text.length);
-    console.log('[DEBUG] Last 3 lines:', JSON.stringify(lastLine));
-    console.log('[DEBUG] Last 50 chars of trimmedText:', JSON.stringify(trimmedText.slice(-50)));
-
     // Match DONE only when it's:
     // - Formatted: **DONE**, __DONE__, _DONE_ (anywhere in last 3 lines)
     // - Or standalone: DONE at the very end, optionally followed by markdown code fence
     // Use (?:^|\n) to match start-of-string OR after newline, ensuring it's on last line
     // Allow optional ``` after DONE (for markdown code blocks)
     const isDone = /\*\*DONE\*\*|__DONE__|_DONE__|(?:^|\n)\s*DONE[\s.!]*$/.test(lastLine);
-    console.log('[DEBUG] isDone:', isDone);
 
     // Extract instruction and model from "Tell worker" directive
     // Supports multiple formats:
