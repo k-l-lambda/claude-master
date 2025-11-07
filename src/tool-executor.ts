@@ -258,18 +258,20 @@ export class ToolExecutor {
 
   private async gitCommand(input: any): Promise<string> {
     const command = input.command;
+    const timeoutSeconds = input.timeout || 30; // Default 30 seconds
+    const timeoutMs = timeoutSeconds * 1000;
 
     try {
       const result = execSync(`git ${command}`, {
         cwd: this.workDir,
         encoding: 'utf-8',
         maxBuffer: 10 * 1024 * 1024,
-        timeout: 30000, // 30 seconds timeout
+        timeout: timeoutMs,
       });
       return result || 'Command executed successfully';
     } catch (error: any) {
       if (error.killed && error.signal === 'SIGTERM') {
-        throw new Error(`Git command timed out after 30 seconds: git ${command}`);
+        throw new Error(`Git command timed out after ${timeoutSeconds} seconds: git ${command}`);
       }
       throw new Error(`Git command failed: ${error.message}`);
     }
@@ -277,6 +279,8 @@ export class ToolExecutor {
 
   private async bashCommand(input: any): Promise<string> {
     const command = input.command;
+    const timeoutSeconds = input.timeout || 30; // Default 30 seconds
+    const timeoutMs = timeoutSeconds * 1000;
 
     // Security: block dangerous commands
     const dangerousCommands = ['rm -rf', 'sudo', 'mkfs', 'dd', '> /dev'];
@@ -291,12 +295,12 @@ export class ToolExecutor {
         cwd: this.workDir,
         encoding: 'utf-8',
         maxBuffer: 10 * 1024 * 1024,
-        timeout: 30000, // 30 seconds timeout
+        timeout: timeoutMs,
       });
       return result || 'Command executed successfully';
     } catch (error: any) {
       if (error.killed && error.signal === 'SIGTERM') {
-        throw new Error(`Bash command timed out after 30 seconds: ${command}`);
+        throw new Error(`Bash command timed out after ${timeoutSeconds} seconds: ${command}`);
       }
       throw new Error(`Bash command failed: ${error.message}`);
     }

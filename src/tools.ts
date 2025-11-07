@@ -110,6 +110,10 @@ export const instructorTools: Tool[] = [
           type: 'string',
           description: 'Git command to execute (e.g., "status", "log", "diff")',
         },
+        timeout: {
+          type: 'number',
+          description: 'Timeout in seconds (default: 30). Use higher values for operations like large clones or fetches.',
+        },
       },
       required: ['command'],
     },
@@ -123,6 +127,10 @@ export const instructorTools: Tool[] = [
         command: {
           type: 'string',
           description: 'Bash command to execute (e.g., "ls -la", "find . -name *.ts", "tree -L 2")',
+        },
+        timeout: {
+          type: 'number',
+          description: 'Timeout in seconds (default: 30). Use higher values for long-running commands like builds or tests.',
         },
       },
       required: ['command'],
@@ -283,6 +291,10 @@ export const workerTools: Tool[] = [
         command: {
           type: 'string',
           description: 'Bash command to execute',
+        },
+        timeout: {
+          type: 'number',
+          description: 'Timeout in seconds (default: 30). Use higher values for long-running commands like builds or tests.',
         },
       },
       required: ['command'],
