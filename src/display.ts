@@ -74,4 +74,39 @@ export class Display {
 
     return `${head}\n... [${text.length - headLength - tailLength} characters omitted] ...\n${tail}`;
   }
+
+  // ===== Debug Status Display =====
+
+  /**
+   * Print Instructor response status for debugging
+   */
+  static instructorStatus(workerModel: string, shouldContinue: boolean, needsCorrection: boolean): void {
+    // Model emoji
+    let modelEmoji = '🚀'; // default sonnet
+    if (workerModel.includes('opus')) {
+      modelEmoji = '🧠'; // Opus - powerful brain
+    } else if (workerModel.includes('haiku')) {
+      modelEmoji = '⚡'; // Haiku - fast lightning
+    } else if (workerModel.includes('sonnet')) {
+      modelEmoji = '🚀'; // Sonnet - balanced rocket
+    }
+
+    // Continue emoji
+    const continueEmoji = shouldContinue ? '▶️ ' : '⏹️ ';
+
+    // Correction emoji
+    const correctionEmoji = needsCorrection ? '⚠️ ' : '✅';
+
+    // Model short name
+    const modelName = this.getModelShortName(workerModel);
+
+    console.log(chalk.dim(`[Status] ${modelEmoji} ${modelName} | ${continueEmoji} ${shouldContinue ? 'Continue' : 'Stop'} | ${correctionEmoji} ${needsCorrection ? 'Needs correction' : 'OK'}`));
+  }
+
+  private static getModelShortName(model: string): string {
+    if (model.includes('opus')) return 'Opus';
+    if (model.includes('haiku')) return 'Haiku';
+    if (model.includes('sonnet')) return 'Sonnet';
+    return model;
+  }
 }

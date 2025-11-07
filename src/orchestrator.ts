@@ -190,6 +190,13 @@ export class Orchestrator {
 
           Display.newline();
 
+          // Print debug status
+          Display.instructorStatus(
+            instructorResponse.workerModel || this.config.workerModel,
+            instructorResponse.shouldContinue,
+            instructorResponse.needsCorrection || false
+          );
+
           // If interrupted, break out and wait for new instruction
           if (this.interrupted) {
             this.paused = false;
@@ -247,6 +254,13 @@ export class Orchestrator {
             }
 
             Display.newline();
+
+            // Print debug status after correction
+            Display.instructorStatus(
+              instructorResponse.workerModel || this.config.workerModel,
+              instructorResponse.shouldContinue,
+              instructorResponse.needsCorrection || false
+            );
 
             // If interrupted after correction prompt, break out
             if (this.interrupted) {
@@ -374,6 +388,13 @@ export class Orchestrator {
 
             Display.newline();
 
+            // Print debug status after reviewing Worker response
+            Display.instructorStatus(
+              nextInstructorResponse.workerModel || this.config.workerModel,
+              nextInstructorResponse.shouldContinue,
+              nextInstructorResponse.needsCorrection || false
+            );
+
             // If interrupted, break out of conversation loop
             if (this.interrupted) {
               this.paused = false;
@@ -433,6 +454,13 @@ export class Orchestrator {
               );
 
               Display.newline();
+
+              // Print debug status after timeout response
+              Display.instructorStatus(
+                nextInstructorResponse.workerModel || this.config.workerModel,
+                nextInstructorResponse.shouldContinue,
+                nextInstructorResponse.needsCorrection || false
+              );
 
               instructorResponse = nextInstructorResponse;
               currentWorkerModel = nextInstructorResponse.workerModel || this.config.workerModel;
