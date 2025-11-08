@@ -146,7 +146,7 @@ You can manage Worker's context using these tools:
     abortSignal?: AbortSignal
   ): Promise<InstructorResponse> {
     // Agentic loop: keep calling API until we get a non-tool response
-    let maxIterations = 10;
+    let maxIterations = 50;
     let iteration = 0;
     let fullText = '';
     let thinking = '';

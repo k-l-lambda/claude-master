@@ -69,7 +69,7 @@ export class WorkerManager {
     });
 
     // Agentic loop: keep calling API until we get a non-tool response
-    let maxIterations = 10; // Prevent infinite loops
+    let maxIterations = 50; // Prevent infinite loops
     let iteration = 0;
     let finalText = '';
 
