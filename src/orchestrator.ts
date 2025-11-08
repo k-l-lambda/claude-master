@@ -67,6 +67,9 @@ export class Orchestrator {
 
     await new Promise(resolve => setTimeout(resolve, 1000));
 
+    // Reset paused flag before accepting input (allow ESC to work again)
+    this.paused = false;
+
     if (process.stdin.isTTY) {
       try {
         process.stdin.setRawMode(false);
@@ -77,12 +80,6 @@ export class Orchestrator {
 
     try {
       const userInput = await new Promise<string>((resolve, reject) => {
-        // Check if readline is still open
-        if (this.rl.closed) {
-          reject(new Error('Input stream closed'));
-          return;
-        }
-
         this.rl.question('Input your instruction:\n> ', (answer) => {
           resolve(answer);
         });
