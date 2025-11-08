@@ -3,6 +3,9 @@ import { InstructorManager } from './instructor.js';
 import { WorkerManager } from './worker.js';
 import { Display } from './display.js';
 import { SessionManager } from './session-manager.js';
+import { TokenCounter } from './token-counter.js';
+import { ConversationCompactor } from './compactor.js';
+import { ClaudeClient } from './client.js';
 import * as readline from 'readline';
 
 export class Orchestrator {
@@ -18,6 +21,8 @@ export class Orchestrator {
   private sessionManager: SessionManager;
   private sessionId: string;
   private workDir: string;
+  private compactor: ConversationCompactor | null = null;
+  private isRestoredSession: boolean = false;
 
   constructor(config: Config, workDir: string, sessionId?: string) {
     this.config = config;
@@ -30,7 +35,14 @@ export class Orchestrator {
 
     this.instructor = new InstructorManager(config, '', workDir);
     this.worker = new WorkerManager(config, workDir);
-    this.instructor.setWorkerToolExecutor(this.worker.getToolExecutor());
+    // Connect Instructor's tool executor to Worker's tool executor and Worker itself
+    this.instructor.setWorkerToolExecutor(this.worker.getToolExecutor(), this.worker);
+
+    // Initialize compactor for Instructor
+    if (config.apiKey) {
+      const client = new ClaudeClient(config);
+      this.compactor = new ConversationCompactor(client.getClient(), config.instructorModel);
+    }
 
     this.rl = readline.createInterface({
       input: process.stdin,
@@ -172,6 +184,92 @@ export class Orchestrator {
     }
 
     return cleanedInput.trim();
+  }
+
+  /**
+   * Check if user input contains compact command
+   */
+  private isCompactCommand(input: string): boolean {
+    return /^\s*\[compact\]/i.test(input);
+  }
+
+  /**
+   * Check and perform auto-compact if needed
+   */
+  private async checkAndAutoCompact(): Promise<boolean> {
+    if (!this.compactor) return false;
+
+    const messages = this.instructor.getConversationHistory();
+    // Auto-compact at 50k tokens (25% of 200k limit)
+    if (TokenCounter.shouldCompact(messages, 200000, 0.25)) {
+      Display.newline();
+      Display.warning('⚠️  Conversation approaching recommended limit');
+      Display.system(` Current usage: ${TokenCounter.formatTokenUsage(messages)}`);
+      Display.system('  Performing automatic compaction...');
+      Display.newline();
+
+      try {
+        const result = await this.compactor.compact(messages, 'auto');
+
+        // Replace conversation history with compacted version
+        this.instructor.restoreConversationHistory([result.summaryMessage]);
+
+        Display.success('✓ Conversation compacted automatically');
+        Display.system(`  Reduced from ${result.preTokens.toLocaleString()} to ${result.postTokens.toLocaleString()} tokens`);
+        Display.system(`  Saved ${(result.preTokens - result.postTokens).toLocaleString()} tokens (~${Math.round((1 - result.postTokens / result.preTokens) * 100)}%)`);
+        Display.newline();
+
+        // Save session after compaction
+        await this.saveSession();
+        return true;
+      } catch (error: any) {
+        Display.error(`Failed to compact conversation: ${error.message}`);
+        Display.system('  Continuing with current history...');
+        Display.newline();
+        return false;
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Perform manual compaction
+   */
+  private async performManualCompact(): Promise<void> {
+    if (!this.compactor) {
+      Display.error('Compaction not available - API key required');
+      return;
+    }
+
+    const messages = this.instructor.getConversationHistory();
+    if (messages.length === 0) {
+      Display.warning('No conversation history to compact');
+      return;
+    }
+
+    Display.newline();
+    Display.info('📦 Compacting conversation...');
+    Display.system(`  Current usage: ${TokenCounter.formatTokenUsage(messages)}`);
+    Display.newline();
+
+    try {
+      const result = await this.compactor.compact(messages, 'manual');
+
+      // Replace conversation history with compacted version
+      this.instructor.restoreConversationHistory([result.summaryMessage]);
+
+      Display.success('✓ Conversation compacted successfully');
+      Display.system(`  Reduced from ${result.preTokens.toLocaleString()} to ${result.postTokens.toLocaleString()} tokens`);
+      Display.system(`  Saved ${(result.preTokens - result.postTokens).toLocaleString()} tokens (~${Math.round((1 - result.postTokens / result.preTokens) * 100)}%)`);
+      Display.newline();
+
+      // Save session after compaction
+      await this.saveSession();
+    } catch (error: any) {
+      Display.error(`Failed to compact conversation: ${error.message}`);
+      Display.newline();
+    }
   }
 
   private handleApiError(error: any): 'continue' | 'break' | 'throw' {
@@ -408,7 +506,16 @@ export class Orchestrator {
       Display.info(`Max Rounds: ${this.config.maxRounds}`);
     }
     Display.info(`Press ESC to pause and give instructions`);
+    Display.info(`Type [compact] to manually compact conversation history`);
     Display.newline();
+
+    // Show session restored message if applicable
+    if (this.isRestoredSession) {
+      Display.warning('📋 Session Restored');
+      Display.system('  Worker context was NOT persisted - you need to re-explain the task to Worker');
+      Display.system('  Instructor context has been restored from session file');
+      Display.newline();
+    }
 
     try {
       let instructorResponse: any = null;
@@ -416,6 +523,9 @@ export class Orchestrator {
 
       // Main session loop
       while (true) {
+        // Check for auto-compact before processing
+        await this.checkAndAutoCompact();
+
         // Step 1: Get user instruction if needed (when no active response or done)
         if (!instructorResponse?.shouldContinue) {
           if (instructorResponse) {
@@ -431,6 +541,12 @@ export class Orchestrator {
           if (!userInstruction) {
             Display.info('Session ended by user');
             break;
+          }
+
+          // Check for compact command
+          if (this.isCompactCommand(userInstruction)) {
+            await this.performManualCompact();
+            continue;
           }
 
           // Parse round control commands and get cleaned instruction
@@ -550,6 +666,7 @@ export class Orchestrator {
 
   /**
    * Save current session state
+   * Only saves Instructor messages - Worker context is not persisted
    */
   async saveSession(): Promise<void> {
     const state: SessionState = {
@@ -559,7 +676,7 @@ export class Orchestrator {
       currentRound: this.currentRound,
       remainingRounds: this.remainingRounds,
       instructorMessages: this.instructor.getConversationHistory(),
-      workerMessages: this.worker.getConversationHistory(),
+      // Worker messages are NOT saved
       workDir: this.workDir,
       config: this.config,
     };
@@ -569,6 +686,7 @@ export class Orchestrator {
 
   /**
    * Restore session from saved state
+   * Only restores Instructor messages - Worker starts fresh
    */
   async restoreSession(sessionId?: string): Promise<boolean> {
     const state = await this.sessionManager.loadSession(sessionId);
@@ -583,9 +701,14 @@ export class Orchestrator {
     this.remainingRounds = state.remainingRounds;
     this.workDir = state.workDir;
 
-    // Restore conversation histories
+    // Restore only Instructor conversation history
     this.instructor.restoreConversationHistory(state.instructorMessages);
-    this.worker.restoreConversationHistory(state.workerMessages);
+
+    // Worker starts with empty history (not persisted)
+    // Instructor will need to re-explain task context to Worker
+
+    // Mark as restored session
+    this.isRestoredSession = true;
 
     return true;
   }

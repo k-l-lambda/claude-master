@@ -16,6 +16,18 @@ export interface Message {
   content: string | Anthropic.ContentBlock[];
 }
 
+export interface SystemMessage {
+  type: 'system';
+  subtype: 'compact_boundary' | 'compact_summary';
+  content: string;
+  timestamp: string;
+  metadata?: {
+    trigger: 'manual' | 'auto';
+    preTokens: number;
+    postTokens: number;
+  };
+}
+
 export interface ConversationContext {
   messages: Message[];
   round: number;
@@ -47,7 +59,7 @@ export interface SessionState {
   currentRound: number;
   remainingRounds: number;
   instructorMessages: Message[];
-  workerMessages: Message[];
+  // Worker messages are NOT persisted - Worker starts fresh on session resume
   workDir: string;
   config: Config;
 }

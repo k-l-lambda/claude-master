@@ -186,6 +186,33 @@ export const instructorTools: Tool[] = [
       required: ['tool_name'],
     },
   },
+  {
+    name: 'compact_worker_context',
+    description: 'Trim Worker\'s conversation history to keep only the most recent N rounds. Use this when Worker\'s context has grown too large (>100k tokens). This preserves recent context while reducing token usage. Default: keep last 10 rounds.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        keep_rounds: {
+          type: 'number',
+          description: 'Number of recent rounds to keep (default: 10). Each round = 1 instruction + 1 response pair.',
+        },
+        reason: {
+          type: 'string',
+          description: 'Reason for compacting Worker context (optional, for logging)',
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'get_worker_context_size',
+    description: 'Get the current size of Worker\'s conversation history in estimated tokens. Use this to monitor Worker\'s context usage and decide when to reset.',
+    input_schema: {
+      type: 'object',
+      properties: {},
+      required: [],
+    },
+  },
 ];
 
 // Full tools for Worker (all except git and dangerous commands)

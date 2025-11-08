@@ -5,7 +5,8 @@ import { SessionState, Message } from './types.js';
 import { randomUUID } from 'crypto';
 
 // Track last saved message counts to implement incremental saves
-const lastSavedCounts = new Map<string, { instructor: number; worker: number }>();
+// Only track instructor messages as worker messages are not persisted
+const lastSavedCounts = new Map<string, { instructor: number }>();
 
 export class SessionManager {
   private sessionDir: string;
@@ -28,7 +29,8 @@ export class SessionManager {
 
   /**
    * Save session state incrementally (append-only JSONL)
-   * Only appends NEW messages since last save
+   * Only appends NEW instructor messages since last save
+   * Worker messages are NOT persisted - Worker starts fresh on session resume
    */
   async saveSession(state: SessionState): Promise<string> {
     await this.ensureSessionDir();
@@ -37,11 +39,10 @@ export class SessionManager {
     const filepath = path.join(this.sessionDir, filename);
 
     // Get last saved counts for this session
-    const lastCounts = lastSavedCounts.get(state.sessionId) || { instructor: 0, worker: 0 };
+    const lastCounts = lastSavedCounts.get(state.sessionId) || { instructor: 0 };
 
     // Determine which messages are new
     const newInstructorMessages = state.instructorMessages.slice(lastCounts.instructor);
-    const newWorkerMessages = state.workerMessages.slice(lastCounts.worker);
 
     // Prepare entries to append
     const entries: string[] = [];
@@ -50,15 +51,6 @@ export class SessionManager {
     for (const msg of newInstructorMessages) {
       entries.push(JSON.stringify({
         type: 'instructor-message',
-        timestamp: new Date().toISOString(),
-        message: msg,
-      }));
-    }
-
-    // Append new worker messages
-    for (const msg of newWorkerMessages) {
-      entries.push(JSON.stringify({
-        type: 'worker-message',
         timestamp: new Date().toISOString(),
         message: msg,
       }));
@@ -85,7 +77,6 @@ export class SessionManager {
     // Update last saved counts
     lastSavedCounts.set(state.sessionId, {
       instructor: state.instructorMessages.length,
-      worker: state.workerMessages.length,
     });
 
     // Update current.json to point to latest session
@@ -97,6 +88,7 @@ export class SessionManager {
 
   /**
    * Load session from JSONL file (reconstruct state from incremental entries)
+   * Only loads instructor messages - Worker always starts fresh
    */
   async loadSession(sessionId?: string): Promise<SessionState | null> {
     try {
@@ -118,7 +110,6 @@ export class SessionManager {
 
       // Reconstruct state from entries
       const instructorMessages: Message[] = [];
-      const workerMessages: Message[] = [];
       let metadata: any = null;
 
       for (const line of lines) {
@@ -126,12 +117,11 @@ export class SessionManager {
 
         if (entry.type === 'instructor-message') {
           instructorMessages.push(entry.message);
-        } else if (entry.type === 'worker-message') {
-          workerMessages.push(entry.message);
         } else if (entry.type === 'session-metadata') {
           // Keep updating with latest metadata
           metadata = entry;
         }
+        // Ignore any legacy 'worker-message' entries
       }
 
       if (!metadata) {
@@ -146,7 +136,6 @@ export class SessionManager {
         currentRound: metadata.currentRound,
         remainingRounds: metadata.remainingRounds,
         instructorMessages,
-        workerMessages,
         workDir: metadata.workDir,
         config: metadata.config,
       };
@@ -154,7 +143,6 @@ export class SessionManager {
       // Update last saved counts after loading
       lastSavedCounts.set(state.sessionId, {
         instructor: instructorMessages.length,
-        worker: workerMessages.length,
       });
 
       return state;

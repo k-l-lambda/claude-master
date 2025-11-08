@@ -15,6 +15,13 @@ export class ClaudeClient {
   }
 
   /**
+   * Get the underlying Anthropic client instance
+   */
+  getClient(): Anthropic {
+    return this.client;
+  }
+
+  /**
    * Generate mock response for debug mode
    */
   private generateMockResponse(model: string, useThinking: boolean, context?: 'instructor' | 'worker'): Anthropic.Message {

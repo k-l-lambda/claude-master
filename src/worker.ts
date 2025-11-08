@@ -159,6 +159,10 @@ export class WorkerManager {
     this.conversationHistory = [];
   }
 
+  resetConversationHistory(): void {
+    this.reset();
+  }
+
   getToolExecutor(): ToolExecutor {
     return this.toolExecutor;
   }
