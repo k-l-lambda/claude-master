@@ -13,6 +13,7 @@ export class InstructorManager {
   private toolExecutor: ToolExecutor;
   private workerToolExecutor: ToolExecutor | null = null;
   private workerManager: WorkerManager | null = null;
+  private workerTimeoutSetter: ((timeoutMs: number) => void) | null = null;
 
   /**
    * Sanitize response content blocks to remove streaming-specific fields
@@ -92,6 +93,11 @@ You can manage Worker's context using these tools:
   - This keeps recent context while reducing token usage
   - Worker will still remember the last N rounds of conversation
   - Example: compact_worker_context with keep_rounds=5 keeps last 5 rounds only
+- set_worker_timeout: Set Worker's inactivity timeout (default: 60 seconds)
+  - Worker aborts if no token output for this duration
+  - Use 120-300s for complex tasks requiring more thinking time
+  - Use 30-60s for simple tasks
+  - Range: 30-600 seconds
 
 **Your Context**: Your conversation history may be compacted when approaching token limits (50k+ tokens):
 - User can trigger compaction with "[compact]" command
@@ -234,7 +240,7 @@ You can manage Worker's context using these tools:
           toolResults.push(result);
         }
         // Handle Worker context management tools
-        else if (toolUse.name === 'compact_worker_context' || toolUse.name === 'get_worker_context_size') {
+        else if (toolUse.name === 'compact_worker_context' || toolUse.name === 'get_worker_context_size' || toolUse.name === 'set_worker_timeout') {
           const result = await this.handleWorkerContextTool(toolUse);
           toolResults.push(result);
         }
@@ -368,6 +374,10 @@ You can manage Worker's context using these tools:
     if (workerManager) {
       this.workerManager = workerManager;
     }
+  }
+
+  setWorkerTimeoutSetter(setter: (timeoutMs: number) => void): void {
+    this.workerTimeoutSetter = setter;
   }
 
   private async handlePermissionTool(toolUse: any): Promise<any> {
@@ -526,6 +536,44 @@ Token Usage:
 - Consider compacting if > 100k tokens (50% of limit)
 - Must compact if approaching 160k tokens (80% of limit)
 - Use compact_worker_context to trim to recent rounds`,
+        };
+      } else if (toolUse.name === 'set_worker_timeout') {
+        if (!this.workerTimeoutSetter) {
+          return {
+            type: 'tool_result',
+            tool_use_id: toolUse.id,
+            content: 'Error: Worker timeout setter not initialized.',
+            is_error: true,
+          };
+        }
+
+        const timeoutSeconds = toolUse.input.timeout_seconds;
+        const reason = toolUse.input.reason || 'No reason provided';
+
+        // Validate timeout range
+        if (timeoutSeconds < 30 || timeoutSeconds > 600) {
+          return {
+            type: 'tool_result',
+            tool_use_id: toolUse.id,
+            content: `❌ Invalid timeout: ${timeoutSeconds}s. Timeout must be between 30 and 600 seconds.`,
+            is_error: true,
+          };
+        }
+
+        // Set the timeout
+        const timeoutMs = timeoutSeconds * 1000;
+        this.workerTimeoutSetter(timeoutMs);
+
+        return {
+          type: 'tool_result',
+          tool_use_id: toolUse.id,
+          content: `✓ Worker timeout set to ${timeoutSeconds} seconds (${Math.floor(timeoutSeconds / 60)}m ${timeoutSeconds % 60}s)
+Reason: ${reason}
+
+💡 Worker will abort if it doesn't output any token for ${timeoutSeconds} seconds.
+- Default: 60s (good for most tasks)
+- Complex tasks: 120-300s
+- Simple tasks: 30-60s`,
         };
       }
 

@@ -213,6 +213,24 @@ export const instructorTools: Tool[] = [
       required: [],
     },
   },
+  {
+    name: 'set_worker_timeout',
+    description: 'Set Worker\'s inactivity timeout in seconds. Worker will abort if it doesn\'t output any token for this duration. Default: 60 seconds. Use longer timeout (120-300s) for complex tasks that need more thinking time.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        timeout_seconds: {
+          type: 'number',
+          description: 'Timeout in seconds (e.g., 60, 120, 180, 300). Must be between 30 and 600.',
+        },
+        reason: {
+          type: 'string',
+          description: 'Reason for changing timeout (optional, for logging)',
+        },
+      },
+      required: ['timeout_seconds'],
+    },
+  },
 ];
 
 // Full tools for Worker (all except git and dangerous commands)

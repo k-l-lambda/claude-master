@@ -23,6 +23,7 @@ export class Orchestrator {
   private workDir: string;
   private compactor: ConversationCompactor | null = null;
   private isRestoredSession: boolean = false;
+  private workerTimeoutMs: number = 60000; // Default: 60 seconds
 
   constructor(config: Config, workDir: string, sessionId?: string) {
     this.config = config;
@@ -37,6 +38,10 @@ export class Orchestrator {
     this.worker = new WorkerManager(config, workDir);
     // Connect Instructor's tool executor to Worker's tool executor and Worker itself
     this.instructor.setWorkerToolExecutor(this.worker.getToolExecutor(), this.worker);
+    // Connect Instructor's ability to set Worker timeout
+    this.instructor.setWorkerTimeoutSetter((timeoutMs: number) => {
+      this.workerTimeoutMs = timeoutMs;
+    });
 
     // Initialize compactor for Instructor
     if (config.apiKey) {
@@ -440,7 +445,7 @@ export class Orchestrator {
 
     let workerTextBuffer = '';
     let lastTokenTime = Date.now();
-    const TIMEOUT_MS = 60000;
+    const TIMEOUT_MS = this.workerTimeoutMs;
     let workerTimedOut = false;
 
     this.currentAbortController = new AbortController();
