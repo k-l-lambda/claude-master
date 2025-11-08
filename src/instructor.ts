@@ -200,6 +200,34 @@ You can manage Worker's context using these tools:
       // Execute tools and collect results
       const toolResults: any[] = [];
       for (const toolUse of toolUses) {
+        // Log tool execution with parameters
+        const { Display } = await import('./display.js');
+
+        // Format tool parameters
+        let paramsStr = '';
+        if (toolUse.input && Object.keys(toolUse.input).length > 0) {
+          const paramParts: string[] = [];
+          for (const [key, value] of Object.entries(toolUse.input)) {
+            let valueStr: string;
+            if (typeof value === 'string') {
+              // Truncate long strings: keep head and tail
+              if (value.length > 100) {
+                const head = value.substring(0, 20).replace(/\n/g, " ");
+                const tail = value.substring(value.length - 20).replace(/\n/g, " ");
+                valueStr = `"${head}...${tail}"`;
+              } else {
+                valueStr = `"${value}"`;
+              }
+            } else {
+              valueStr = JSON.stringify(value);
+            }
+            paramParts.push(`${key}=${valueStr}`);
+          }
+          paramsStr = ` (${paramParts.join(', ')})`;
+        }
+
+        Display.system(`🔧 ${toolUse.name}${paramsStr}`);
+
         // Handle special permission management tools
         if (toolUse.name === 'grant_worker_permission' || toolUse.name === 'revoke_worker_permission') {
           const result = await this.handlePermissionTool(toolUse);
