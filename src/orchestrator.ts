@@ -1,7 +1,8 @@
-import { Config, InstanceType } from './types.js';
+import { Config, InstanceType, SessionState } from './types.js';
 import { InstructorManager } from './instructor.js';
 import { WorkerManager } from './worker.js';
 import { Display } from './display.js';
+import { SessionManager } from './session-manager.js';
 import * as readline from 'readline';
 
 export class Orchestrator {
@@ -14,10 +15,19 @@ export class Orchestrator {
   private interrupted: boolean = false;
   private currentAbortController: AbortController | null = null;
   private rl: readline.Interface;
+  private sessionManager: SessionManager;
+  private sessionId: string;
+  private workDir: string;
 
-  constructor(config: Config, workDir: string) {
+  constructor(config: Config, workDir: string, sessionId?: string) {
     this.config = config;
+    this.workDir = workDir;
     this.remainingRounds = config.maxRounds || Infinity;
+    this.sessionManager = new SessionManager();
+
+    // Generate or use provided session ID
+    this.sessionId = sessionId || this.sessionManager.generateSessionId();
+
     this.instructor = new InstructorManager(config, '', workDir);
     this.worker = new WorkerManager(config, workDir);
     this.instructor.setWorkerToolExecutor(this.worker.getToolExecutor());
@@ -441,6 +451,9 @@ export class Orchestrator {
 
           instructorResponse = await this.callInstructor(userInstruction, 'user-input');
           if (!instructorResponse) continue;
+
+          // Save session after user instruction
+          await this.saveSession();
         }
 
         // Step 3: Handle correction if needed (IMPORTANT: Check this every loop iteration)
@@ -504,6 +517,9 @@ export class Orchestrator {
           instructorResponse = await this.callInstructor(workerResponse, 'worker-response');
           if (!instructorResponse) break;
 
+          // Save session after Worker-Instructor exchange
+          await this.saveSession();
+
           // Check for needsCorrection after Worker review
           if (instructorResponse.needsCorrection) {
             break; // Break inner loop to handle correction in outer loop
@@ -526,5 +542,58 @@ export class Orchestrator {
 
   getCurrentRound(): number {
     return this.currentRound;
+  }
+
+  getSessionId(): string {
+    return this.sessionId;
+  }
+
+  /**
+   * Save current session state
+   */
+  async saveSession(): Promise<void> {
+    const state: SessionState = {
+      sessionId: this.sessionId,
+      createdAt: new Date().toISOString(),
+      lastUpdatedAt: new Date().toISOString(),
+      currentRound: this.currentRound,
+      remainingRounds: this.remainingRounds,
+      instructorMessages: this.instructor.getConversationHistory(),
+      workerMessages: this.worker.getConversationHistory(),
+      workDir: this.workDir,
+      config: this.config,
+    };
+
+    await this.sessionManager.saveSession(state);
+  }
+
+  /**
+   * Restore session from saved state
+   */
+  async restoreSession(sessionId?: string): Promise<boolean> {
+    const state = await this.sessionManager.loadSession(sessionId);
+
+    if (!state) {
+      return false;
+    }
+
+    // Restore state
+    this.sessionId = state.sessionId;
+    this.currentRound = state.currentRound;
+    this.remainingRounds = state.remainingRounds;
+    this.workDir = state.workDir;
+
+    // Restore conversation histories
+    this.instructor.restoreConversationHistory(state.instructorMessages);
+    this.worker.restoreConversationHistory(state.workerMessages);
+
+    return true;
+  }
+
+  /**
+   * List all available sessions
+   */
+  async listSessions() {
+    return await this.sessionManager.listSessions();
   }
 }

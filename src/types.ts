@@ -39,3 +39,15 @@ export interface Tool {
   description: string;
   input_schema: any;
 }
+
+export interface SessionState {
+  sessionId: string;
+  createdAt: string;
+  lastUpdatedAt: string;
+  currentRound: number;
+  remainingRounds: number;
+  instructorMessages: Message[];
+  workerMessages: Message[];
+  workDir: string;
+  config: Config;
+}

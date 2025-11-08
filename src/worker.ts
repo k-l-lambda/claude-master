@@ -151,6 +151,10 @@ export class WorkerManager {
     return [...this.conversationHistory];
   }
 
+  restoreConversationHistory(messages: Message[]): void {
+    this.conversationHistory = [...messages];
+  }
+
   reset(): void {
     this.conversationHistory = [];
   }

@@ -299,6 +299,10 @@ You can specify which model the Worker should use by including:
     return [...this.conversationHistory];
   }
 
+  restoreConversationHistory(messages: Message[]): void {
+    this.conversationHistory = [...messages];
+  }
+
   setWorkerToolExecutor(workerToolExecutor: ToolExecutor): void {
     this.workerToolExecutor = workerToolExecutor;
   }
