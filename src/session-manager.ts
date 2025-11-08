@@ -1,8 +1,11 @@
 import * as fs from 'fs/promises';
 import * as fsSync from 'fs';
 import * as path from 'path';
-import { SessionState } from './types.js';
+import { SessionState, Message } from './types.js';
 import { randomUUID } from 'crypto';
+
+// Track last saved message counts to implement incremental saves
+const lastSavedCounts = new Map<string, { instructor: number; worker: number }>();
 
 export class SessionManager {
   private sessionDir: string;
@@ -24,8 +27,8 @@ export class SessionManager {
   }
 
   /**
-   * Save session state incrementally (append-only)
-   * Uses JSONL format inspired by claude-code-cli
+   * Save session state incrementally (append-only JSONL)
+   * Only appends NEW messages since last save
    */
   async saveSession(state: SessionState): Promise<string> {
     await this.ensureSessionDir();
@@ -33,15 +36,57 @@ export class SessionManager {
     const filename = `session-${state.sessionId}.jsonl`;
     const filepath = path.join(this.sessionDir, filename);
 
-    // Append session state as a single JSON line
-    const entry = {
-      type: 'session-state',
-      timestamp: new Date().toISOString(),
-      ...state,
-    };
+    // Get last saved counts for this session
+    const lastCounts = lastSavedCounts.get(state.sessionId) || { instructor: 0, worker: 0 };
 
-    // Append to JSONL file (create if doesn't exist)
-    await fs.appendFile(filepath, JSON.stringify(entry) + '\n', { mode: 0o600 });
+    // Determine which messages are new
+    const newInstructorMessages = state.instructorMessages.slice(lastCounts.instructor);
+    const newWorkerMessages = state.workerMessages.slice(lastCounts.worker);
+
+    // Prepare entries to append
+    const entries: string[] = [];
+
+    // Append new instructor messages
+    for (const msg of newInstructorMessages) {
+      entries.push(JSON.stringify({
+        type: 'instructor-message',
+        timestamp: new Date().toISOString(),
+        message: msg,
+      }));
+    }
+
+    // Append new worker messages
+    for (const msg of newWorkerMessages) {
+      entries.push(JSON.stringify({
+        type: 'worker-message',
+        timestamp: new Date().toISOString(),
+        message: msg,
+      }));
+    }
+
+    // Append session metadata (always save current state)
+    entries.push(JSON.stringify({
+      type: 'session-metadata',
+      timestamp: new Date().toISOString(),
+      sessionId: state.sessionId,
+      createdAt: state.createdAt,
+      lastUpdatedAt: state.lastUpdatedAt,
+      currentRound: state.currentRound,
+      remainingRounds: state.remainingRounds,
+      workDir: state.workDir,
+      config: state.config,
+    }));
+
+    // Append all entries to file
+    if (entries.length > 0) {
+      await fs.appendFile(filepath, entries.join('\n') + '\n', { mode: 0o600 });
+    }
+
+    // Update last saved counts
+    lastSavedCounts.set(state.sessionId, {
+      instructor: state.instructorMessages.length,
+      worker: state.workerMessages.length,
+    });
 
     // Update current.json to point to latest session
     const currentPath = path.join(this.sessionDir, 'current.json');
@@ -51,8 +96,7 @@ export class SessionManager {
   }
 
   /**
-   * Load session from JSONL file
-   * Reads all lines and uses the last session-state entry
+   * Load session from JSONL file (reconstruct state from incremental entries)
    */
   async loadSession(sessionId?: string): Promise<SessionState | null> {
     try {
@@ -69,21 +113,51 @@ export class SessionManager {
         filepath = path.join(this.sessionDir, `session-${sessionId}.jsonl`);
       }
 
-      // Read JSONL file and get the last session-state entry
       const content = await fs.readFile(filepath, 'utf-8');
       const lines = content.split('\n').filter(line => line.trim().length > 0);
 
-      let lastState: SessionState | null = null;
+      // Reconstruct state from entries
+      const instructorMessages: Message[] = [];
+      const workerMessages: Message[] = [];
+      let metadata: any = null;
+
       for (const line of lines) {
         const entry = JSON.parse(line);
-        if (entry.type === 'session-state') {
-          // Remove the type field before casting to SessionState
-          const { type, timestamp, ...stateData } = entry;
-          lastState = stateData as SessionState;
+
+        if (entry.type === 'instructor-message') {
+          instructorMessages.push(entry.message);
+        } else if (entry.type === 'worker-message') {
+          workerMessages.push(entry.message);
+        } else if (entry.type === 'session-metadata') {
+          // Keep updating with latest metadata
+          metadata = entry;
         }
       }
 
-      return lastState;
+      if (!metadata) {
+        return null;
+      }
+
+      // Reconstruct SessionState
+      const state: SessionState = {
+        sessionId: metadata.sessionId,
+        createdAt: metadata.createdAt,
+        lastUpdatedAt: metadata.lastUpdatedAt,
+        currentRound: metadata.currentRound,
+        remainingRounds: metadata.remainingRounds,
+        instructorMessages,
+        workerMessages,
+        workDir: metadata.workDir,
+        config: metadata.config,
+      };
+
+      // Update last saved counts after loading
+      lastSavedCounts.set(state.sessionId, {
+        instructor: instructorMessages.length,
+        worker: workerMessages.length,
+      });
+
+      return state;
     } catch (error) {
       return null;
     }
@@ -106,14 +180,23 @@ export class SessionManager {
             const content = await fs.readFile(filepath, 'utf-8');
             const lines = content.split('\n').filter(line => line.trim().length > 0);
 
-            if (lines.length > 0) {
-              const firstEntry = JSON.parse(lines[0]);
-              const lastEntry = JSON.parse(lines[lines.length - 1]);
+            // Find first and last metadata entries
+            let firstMetadata: any = null;
+            let lastMetadata: any = null;
 
+            for (const line of lines) {
+              const entry = JSON.parse(line);
+              if (entry.type === 'session-metadata') {
+                if (!firstMetadata) firstMetadata = entry;
+                lastMetadata = entry;
+              }
+            }
+
+            if (lastMetadata) {
               sessions.push({
                 sessionId,
-                createdAt: firstEntry.createdAt || firstEntry.timestamp,
-                lastUpdatedAt: lastEntry.lastUpdatedAt || lastEntry.timestamp,
+                createdAt: firstMetadata?.createdAt || lastMetadata.createdAt,
+                lastUpdatedAt: lastMetadata.lastUpdatedAt,
               });
             }
           } catch (error) {
@@ -139,7 +222,7 @@ export class SessionManager {
       await this.ensureSessionDir();
       const files = await fs.readdir(this.sessionDir);
 
-      let latestSession: { sessionId: string; lastUpdatedAt: string; workDir: string } | null = null;
+      let latestSession: { sessionId: string; lastUpdatedAt: string } | null = null;
       let latestTime = 0;
 
       for (const file of files) {
@@ -150,21 +233,25 @@ export class SessionManager {
             const content = await fs.readFile(filepath, 'utf-8');
             const lines = content.split('\n').filter(line => line.trim().length > 0);
 
-            if (lines.length > 0) {
-              const lastEntry = JSON.parse(lines[lines.length - 1]);
+            // Find last metadata entry
+            let lastMetadata: any = null;
+            for (const line of lines) {
+              const entry = JSON.parse(line);
+              if (entry.type === 'session-metadata') {
+                lastMetadata = entry;
+              }
+            }
 
-              // Check if this session belongs to the target workDir
-              if (lastEntry.workDir === workDir) {
-                const lastUpdatedTime = new Date(lastEntry.lastUpdatedAt || lastEntry.timestamp).getTime();
+            // Check if this session belongs to the target workDir
+            if (lastMetadata && lastMetadata.workDir === workDir) {
+              const lastUpdatedTime = new Date(lastMetadata.lastUpdatedAt).getTime();
 
-                if (lastUpdatedTime > latestTime) {
-                  latestTime = lastUpdatedTime;
-                  latestSession = {
-                    sessionId,
-                    lastUpdatedAt: lastEntry.lastUpdatedAt || lastEntry.timestamp,
-                    workDir: lastEntry.workDir,
-                  };
-                }
+              if (lastUpdatedTime > latestTime) {
+                latestTime = lastUpdatedTime;
+                latestSession = {
+                  sessionId,
+                  lastUpdatedAt: lastMetadata.lastUpdatedAt,
+                };
               }
             }
           } catch (error) {
@@ -183,6 +270,10 @@ export class SessionManager {
     try {
       const filepath = path.join(this.sessionDir, `session-${sessionId}.jsonl`);
       await fs.unlink(filepath);
+
+      // Clear cached counts
+      lastSavedCounts.delete(sessionId);
+
       return true;
     } catch (error) {
       return false;
