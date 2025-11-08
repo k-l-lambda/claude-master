@@ -76,11 +76,15 @@ export class WorkerManager {
     while (iteration < maxIterations) {
       iteration++;
 
+      // Filter tools based on current permissions
+      const allowedToolNames = this.toolExecutor.getAllowedTools();
+      const filteredTools = workerTools.filter(tool => allowedToolNames.includes(tool.name));
+
       const response = await this.client.streamMessage(
         this.conversationHistory,
         model,
         this.systemPrompt,
-        workerTools,
+        filteredTools,
         false, // No thinking for worker
         (chunk, type) => {
           if (type === 'text' && onTextChunk) {
@@ -113,6 +117,34 @@ export class WorkerManager {
       // Execute tools and collect results
       const toolResults: any[] = [];
       for (const toolUse of toolUses) {
+        // Log tool execution with parameters
+        const { Display } = await import('./display.js');
+
+        // Format tool parameters (same logic as Instructor)
+        let paramsStr = '';
+        if (toolUse.input && Object.keys(toolUse.input).length > 0) {
+          const paramParts: string[] = [];
+          for (const [key, value] of Object.entries(toolUse.input)) {
+            let valueStr: string;
+            if (typeof value === 'string') {
+              // Truncate long strings: keep head and tail
+              if (value.length > 100) {
+                const head = value.substring(0, 20).replace(/\n/g, " ");
+                const tail = value.substring(value.length - 20).replace(/\n/g, " ");
+                valueStr = `"${head}...${tail}"`;
+              } else {
+                valueStr = `"${value}"`;
+              }
+            } else {
+              valueStr = JSON.stringify(value);
+            }
+            paramParts.push(`${key}=${valueStr}`);
+          }
+          paramsStr = ` (${paramParts.join(', ')})`;
+        }
+
+        Display.system(`🔧 ${toolUse.name}${paramsStr}`);
+
         const result = await this.toolExecutor.executeTool(toolUse);
         toolResults.push(result);
       }
