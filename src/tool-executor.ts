@@ -104,6 +104,9 @@ export class ToolExecutor {
         case 'grep_search':
           result = await this.grepSearch(toolUse.input);
           break;
+        case 'git_status':
+          result = await this.gitStatus(toolUse.input);
+          break;
         case 'git_command':
           result = await this.gitCommand(toolUse.input);
           break;
@@ -253,6 +256,44 @@ export class ToolExecutor {
         return 'No matches found';
       }
       throw error;
+    }
+  }
+
+  private async gitStatus(input: any): Promise<string> {
+    const command = input.command;
+    const timeoutSeconds = input.timeout || 30; // Default 30 seconds
+    const timeoutMs = timeoutSeconds * 1000;
+
+    // Whitelist of read-only git commands
+    const readOnlyCommands = [
+      'status', 'log', 'diff', 'show', 'branch', 'remote',
+      'ls-files', 'ls-tree', 'describe', 'rev-parse', 'rev-list',
+      'blame', 'shortlog', 'reflog', 'tag', 'config --get', 'config --list'
+    ];
+
+    // Check if command starts with any read-only command
+    const isReadOnly = readOnlyCommands.some(cmd => {
+      const cmdStart = command.trim().split(/\s+/)[0];
+      return cmdStart === cmd || cmd.startsWith(cmdStart);
+    });
+
+    if (!isReadOnly) {
+      throw new Error(`Git command '${command}' is not a read-only operation. Use git_command tool instead for write operations.`);
+    }
+
+    try {
+      const result = execSync(`git ${command}`, {
+        cwd: this.workDir,
+        encoding: 'utf-8',
+        maxBuffer: 10 * 1024 * 1024,
+        timeout: timeoutMs,
+      });
+      return result || 'Command executed successfully';
+    } catch (error: any) {
+      if (error.killed && error.signal === 'SIGTERM') {
+        throw new Error(`Git command timed out after ${timeoutSeconds} seconds: git ${command}`);
+      }
+      throw new Error(`Git command failed: ${error.message}`);
     }
   }
 

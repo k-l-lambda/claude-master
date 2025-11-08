@@ -101,14 +101,32 @@ export const instructorTools: Tool[] = [
     },
   },
   {
-    name: 'git_command',
-    description: 'Execute git commands',
+    name: 'git_status',
+    description: 'Execute read-only git commands to inspect repository state (status, log, diff, show, branch, remote, etc.). Safe for Worker to use.',
     input_schema: {
       type: 'object',
       properties: {
         command: {
           type: 'string',
-          description: 'Git command to execute (e.g., "status", "log", "diff")',
+          description: 'Git command to execute (e.g., "status", "log --oneline -10", "diff", "show HEAD", "branch -a", "remote -v")',
+        },
+        timeout: {
+          type: 'number',
+          description: 'Timeout in seconds (default: 30).',
+        },
+      },
+      required: ['command'],
+    },
+  },
+  {
+    name: 'git_command',
+    description: 'Execute any git commands including write operations (commit, push, pull, add, reset, etc.). Restricted to Instructor only.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        command: {
+          type: 'string',
+          description: 'Git command to execute (e.g., "commit -m \'message\'", "push origin main", "pull", "add .", "reset --hard")',
         },
         timeout: {
           type: 'number',
@@ -280,6 +298,24 @@ export const workerTools: Tool[] = [
         },
       },
       required: ['pattern'],
+    },
+  },
+  {
+    name: 'git_status',
+    description: 'Execute read-only git commands to inspect repository state (status, log, diff, show, branch, remote, etc.)',
+    input_schema: {
+      type: 'object',
+      properties: {
+        command: {
+          type: 'string',
+          description: 'Git command to execute (e.g., "status", "log --oneline -10", "diff", "show HEAD", "branch -a", "remote -v")',
+        },
+        timeout: {
+          type: 'number',
+          description: 'Timeout in seconds (default: 30).',
+        },
+      },
+      required: ['command'],
     },
   },
   {
