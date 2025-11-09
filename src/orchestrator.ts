@@ -44,7 +44,7 @@ export class Orchestrator {
     });
 
     // Initialize compactor for Instructor
-    if (config.apiKey) {
+    if (config.apiKey || config.authToken) {
       const client = new ClaudeClient(config);
       this.compactor = new ConversationCompactor(client.getClient(), config.instructorModel);
     }
