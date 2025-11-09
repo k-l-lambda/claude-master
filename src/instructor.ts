@@ -1,4 +1,3 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { ClaudeClient } from './client.js';
 import { Config, Message, InstructorResponse } from './types.js';
 import { instructorTools } from './tools.js';
@@ -90,6 +89,7 @@ You can manage Worker's context using these tools:
 - get_worker_context_size: Check how many tokens Worker's history is using
 - compact_worker_context: Trim Worker's history to keep only the most recent N rounds (default: 10)
   - Use when Worker's context > 100k tokens (50% of limit)
+  - REQUIRED when Worker returns "[ERROR: Worker context is too long]"
   - This keeps recent context while reducing token usage
   - Worker will still remember the last N rounds of conversation
   - Example: compact_worker_context with keep_rounds=5 keeps last 5 rounds only
@@ -98,6 +98,13 @@ You can manage Worker's context using these tools:
   - Use 120-300s for complex tasks requiring more thinking time
   - Use 30-60s for simple tasks
   - Range: 30-600 seconds
+
+**Handling Worker Errors**:
+If Worker returns a message starting with "[ERROR: ...]", analyze the error message carefully:
+- The error message contains diagnostic information and suggested actions
+- Follow the suggested actions in the error message
+- Most errors are recoverable - retry after taking corrective action
+- Authentication errors require user intervention
 
 **Your Context**: Your conversation history may be compacted when approaching token limits (50k+ tokens):
 - User can trigger compaction with "[compact]" command

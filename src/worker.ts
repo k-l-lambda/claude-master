@@ -73,27 +73,28 @@ export class WorkerManager {
     let iteration = 0;
     let finalText = '';
 
-    while (iteration < maxIterations) {
-      iteration++;
+    try {
+      while (iteration < maxIterations) {
+        iteration++;
 
-      // Filter tools based on current permissions
-      const allowedToolNames = this.toolExecutor.getAllowedTools();
-      const filteredTools = workerTools.filter(tool => allowedToolNames.includes(tool.name));
+        // Filter tools based on current permissions
+        const allowedToolNames = this.toolExecutor.getAllowedTools();
+        const filteredTools = workerTools.filter(tool => allowedToolNames.includes(tool.name));
 
-      const response = await this.client.streamMessage(
-        this.conversationHistory,
-        model,
-        this.systemPrompt,
-        filteredTools,
-        false, // No thinking for worker
-        (chunk, type) => {
-          if (type === 'text' && onTextChunk) {
-            onTextChunk(chunk);
-          }
-        },
-        abortSignal,
-        'worker'
-      );
+        const response = await this.client.streamMessage(
+          this.conversationHistory,
+          model,
+          this.systemPrompt,
+          filteredTools,
+          false, // No thinking for worker
+          (chunk, type) => {
+            if (type === 'text' && onTextChunk) {
+              onTextChunk(chunk);
+            }
+          },
+          abortSignal,
+          'worker'
+        );
 
       // Check if there are any tool uses
       const toolUses = response.content.filter(block => block.type === 'tool_use');
@@ -177,6 +178,98 @@ export class WorkerManager {
     }
 
     return finalText;
+    } catch (error: any) {
+      // Handle various API errors gracefully - return error message to Instructor instead of throwing
+
+      // Check for context too long error
+      if (error.status === 400 && error.message?.includes('too long')) {
+        const { TokenCounter } = await import('./token-counter.js');
+        const tokenCount = TokenCounter.countConversationTokens(this.conversationHistory);
+
+        return `[ERROR: Worker context is too long]
+
+Worker's conversation history has grown too large for the model to process.
+- Current size: ~${tokenCount.toLocaleString()} tokens
+- Model limit: 200,000 tokens
+
+This happened because Worker has accumulated too much conversation history across multiple rounds.
+
+REQUIRED ACTION:
+Please use the compact_worker_context tool to trim Worker's history, then retry the instruction.
+
+Example:
+1. compact_worker_context(keep_rounds=10, reason="Context too long error")
+2. Re-send the same instruction to Worker
+
+Note: This is not a system error - it's a signal that Worker's context needs management.`;
+      }
+
+      // Handle rate limiting errors
+      if (error.status === 429) {
+        return `[ERROR: Rate limit exceeded]
+
+The API rate limit has been exceeded.
+- Error: ${error.message || 'Too many requests'}
+
+SUGGESTED ACTIONS:
+1. Wait a moment before retrying
+2. If this persists, consider using a lower-tier model (haiku instead of sonnet)
+3. Check your API usage and limits
+
+This is a temporary error - please retry after a short delay.`;
+      }
+
+      // Handle authentication errors
+      if (error.status === 401 || error.status === 403) {
+        return `[ERROR: Authentication failed]
+
+There's an issue with API authentication.
+- Status: ${error.status}
+- Error: ${error.message || 'Unauthorized'}
+
+REQUIRED ACTIONS:
+1. Check that ANTHROPIC_AUTH_TOKEN is correctly set
+2. Verify the API key has not expired
+3. Ensure the API key has proper permissions
+
+This requires user intervention to fix the configuration.`;
+      }
+
+      // Handle timeout/abort errors
+      if (error.name === 'AbortError' || error.message?.includes('aborted')) {
+        return `[ERROR: Worker operation was aborted]
+
+The Worker's operation was interrupted or timed out.
+- This could be due to inactivity timeout or user interruption
+
+SUGGESTED ACTIONS:
+1. If this was a timeout, consider increasing worker timeout: set_worker_timeout(timeout_seconds=180)
+2. Retry the instruction
+3. If the task is too complex, break it into smaller steps
+
+This is a recoverable error - you can retry or adjust the approach.`;
+      }
+
+      // Handle other API errors (500, network issues, etc.)
+      const errorMessage = error.message || String(error);
+      const errorStatus = error.status ? `Status ${error.status}` : 'Unknown status';
+
+      return `[ERROR: Worker encountered an API error]
+
+An unexpected error occurred while processing the instruction.
+- ${errorStatus}
+- Error: ${errorMessage}
+
+SUGGESTED ACTIONS:
+1. Retry the same instruction (transient errors often resolve on retry)
+2. If it persists, try breaking down the task into smaller steps
+3. Check if there are any API service issues
+
+Error details:
+${JSON.stringify({ status: error.status, message: errorMessage, type: error.name }, null, 2)}
+
+This may be a temporary issue - consider retrying or adjusting the approach.`;
+    }
   }
 
   getConversationHistory(): Message[] {
