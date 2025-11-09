@@ -164,25 +164,26 @@ If Worker returns a message starting with "[ERROR: ...]", analyze the error mess
     let fullText = '';
     let thinking = '';
 
-    while (iteration < maxIterations) {
-      iteration++;
+    try {
+      while (iteration < maxIterations) {
+        iteration++;
 
-      const response = await this.client.streamMessage(
-        this.conversationHistory,
-        this.config.instructorModel,
-        this.systemPrompt,
-        instructorTools,
-        this.config.useThinking ?? false,
-        (chunk, type) => {
-          if (type === 'thinking' && onThinkingChunk) {
-            onThinkingChunk(chunk);
-          } else if (type === 'text' && onTextChunk) {
-            onTextChunk(chunk);
-          }
-        },
-        abortSignal,
-        'instructor'
-      );
+        const response = await this.client.streamMessage(
+          this.conversationHistory,
+          this.config.instructorModel,
+          this.systemPrompt,
+          instructorTools,
+          this.config.useThinking ?? false,
+          (chunk, type) => {
+            if (type === 'thinking' && onThinkingChunk) {
+              onThinkingChunk(chunk);
+            } else if (type === 'text' && onTextChunk) {
+              onTextChunk(chunk);
+            }
+          },
+          abortSignal,
+          'instructor'
+        );
 
       // Extract thinking
       for (const block of response.content) {
@@ -285,6 +286,21 @@ If Worker returns a message starting with "[ERROR: ...]", analyze the error mess
     }
 
     return this.parseInstructorResponse(fullText, thinking);
+    } catch (error: any) {
+      // Handle Instructor context too long error
+      if (error.status === 400 && error.message?.includes('too long')) {
+        const { TokenCounter } = await import('./token-counter.js');
+        const tokenCount = TokenCounter.countConversationTokens(this.conversationHistory);
+
+        // Throw a special error that orchestrator will catch and trigger compaction
+        const compactionError = new Error('INSTRUCTOR_CONTEXT_TOO_LONG');
+        (compactionError as any).tokenCount = tokenCount;
+        throw compactionError;
+      }
+
+      // For other errors, re-throw (these should be handled by orchestrator)
+      throw error;
+    }
   }
 
   private parseInstructorResponse(text: string, thinking: string): InstructorResponse {

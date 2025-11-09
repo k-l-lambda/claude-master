@@ -370,6 +370,38 @@ export class Orchestrator {
 
       return response;
     } catch (error: any) {
+      // Handle Instructor context too long - trigger automatic compaction
+      if (error.message === 'INSTRUCTOR_CONTEXT_TOO_LONG') {
+        Display.newline();
+        Display.warning('⚠️  Instructor context is too long');
+        Display.system(`   Current size: ${(error.tokenCount || 0).toLocaleString()} tokens`);
+        Display.system('   Performing emergency compaction...');
+        Display.newline();
+
+        if (!this.compactor) {
+          Display.error('Compactor not initialized - cannot compact');
+          throw error;
+        }
+
+        try {
+          const messages = this.instructor.getConversationHistory();
+          const result = await this.compactor.compact(messages, 'auto');
+          this.instructor.restoreConversationHistory([result.summaryMessage]);
+          await this.saveSession();
+
+          Display.success('✓ Compaction completed successfully');
+          Display.system(`   Reduced: ${result.preTokens.toLocaleString()} → ${result.postTokens.toLocaleString()} tokens`);
+          Display.newline();
+
+          // Retry the same call after compaction
+          Display.system('Retrying Instructor call after compaction...');
+          return await this.callInstructor(message, context);
+        } catch (compactError) {
+          Display.error('Failed to compact Instructor context');
+          throw compactError;
+        }
+      }
+
       const action = this.handleApiError(error);
       if (action === 'throw') throw error;
       return null;
