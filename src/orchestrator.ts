@@ -24,7 +24,7 @@ export class Orchestrator {
   private workDir: string;
   private compactor: ConversationCompactor | null = null;
   private isRestoredSession: boolean = false;
-  private workerTimeoutMs: number = 60000; // Default: 60 seconds
+  private workerTimeoutMs: number = 120000; // Default: 120 seconds
   private modelManager: ModelManager;
 
   constructor(config: Config, workDir: string, sessionId?: string) {
