@@ -525,11 +525,15 @@ export class Orchestrator {
     Display.system('Instruction from Instructor:');
 
     if (toolName === 'call_worker' || toolName === 'call_worker_with_file') {
-      Display.system(Display.truncate(params.instruction || ''));
+      let instruction = params.instruction || '';
+      if (toolName === 'call_worker_with_file')
+        instruction = Display.truncate(instruction)
+      Display.system(instruction);
       Display.system('Mode: Resetting Worker context with new system prompt');
     } else {
-      Display.system(Display.truncate(params.message || ''));
-      Display.system('Mode: Continuing Worker conversation');
+      Display.system(params.message || '');
+      const workerHistorySize = this.worker.getConversationHistory().length;
+      Display.system(`Mode: Continuing Worker conversation (history: ${workerHistorySize} messages)`);
     }
     Display.newline();
 

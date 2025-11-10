@@ -206,18 +206,18 @@ export class ClaudeClient {
     onChunk?: (chunk: string, type: 'thinking' | 'text') => void,
     context?: 'instructor' | 'worker'
   ): Promise<Anthropic.Message> {
-    console.log('[DEBUG] streamMockResponse called, context:', context);
+    // console.log('[DEBUG] streamMockResponse called, context:', context);
     const response = this.generateMockResponse(model, useThinking, context);
-    console.log('[DEBUG] Generated mock response with', response.content.length, 'content blocks');
+    // console.log('[DEBUG] Generated mock response with', response.content.length, 'content blocks');
 
     // Simulate streaming delay
     const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
     for (const block of response.content) {
-      console.log('[DEBUG] Processing block type:', block.type);
+      // console.log('[DEBUG] Processing block type:', block.type);
       if (block.type === 'thinking' && onChunk) {
         const thinking = (block as any).thinking || '';
-        console.log('[DEBUG] Streaming thinking, length:', thinking.length);
+        // console.log('[DEBUG] Streaming thinking, length:', thinking.length);
         // Stream thinking in chunks
         for (let i = 0; i < thinking.length; i += 15) {
           await delay(20);
@@ -225,7 +225,7 @@ export class ClaudeClient {
         }
       } else if (block.type === 'text' && onChunk) {
         const text = block.text;
-        console.log('[DEBUG] Streaming text, length:', text.length);
+        // console.log('[DEBUG] Streaming text, length:', text.length);
         // Stream text in chunks
         for (let i = 0; i < text.length; i += 8) {
           await delay(30);
@@ -233,12 +233,12 @@ export class ClaudeClient {
         }
       } else if (block.type === 'tool_use') {
         // Tool use blocks appear instantly (not streamed character by character)
-        console.log('[DEBUG] Found tool_use block:', (block as any).name);
+        // console.log('[DEBUG] Found tool_use block:', (block as any).name);
         await delay(50);
       }
     }
 
-    console.log('[DEBUG] streamMockResponse completed');
+    // console.log('[DEBUG] streamMockResponse completed');
     return response;
   }
 
