@@ -29,63 +29,89 @@ export class ClaudeClient {
     const isWorker = context === 'worker';
 
     const instructorResponses = [
-      // Correct format - with "Tell worker"
+      // Correct format - using call_worker tool (would trigger tool execution)
       {
         weight: 3,
-        text: 'I understand the task. Let me instruct the Worker to proceed.\n\nTell worker: Please implement the requested feature.'
+        text: 'I understand the task. Let me delegate this to Worker with appropriate context.',
+        useTool: true,
+        toolName: 'call_worker',
       },
       {
         weight: 3,
-        text: 'Let me analyze this. The Worker should handle the implementation.\n\nTell worker: Create a function to solve this problem.'
+        text: 'I\'ll have Worker implement this feature. Setting up the context now.',
+        useTool: true,
+        toolName: 'call_worker',
+      },
+      {
+        weight: 2,
+        text: 'Good progress. Let me continue with Worker on the next steps.',
+        useTool: true,
+        toolName: 'tell_worker',
+      },
+      {
+        weight: 2,
+        text: 'Worker needs more guidance. Let me provide additional instructions.',
+        useTool: true,
+        toolName: 'tell_worker',
+      },
+      {
+        weight: 1,
+        text: 'I have a detailed system prompt file prepared. Let me use it for Worker.',
+        useTool: true,
+        toolName: 'call_worker_with_file',
+      },
+      // Task completion
+      {
+        weight: 0.1,
+        text: 'Excellent work! All requirements have been fulfilled.\n\nDONE'
       },
       {
         weight: 0.1,
-        text: 'This looks good. The task is complete.\n\nDONE.\n'
+        text: 'The implementation is complete and tested. Task finished.\n\n**DONE**'
       },
-      {
-        weight: 0.1,
-        text: 'All requirements have been satisfied.\n\n**DONE**'
-      },
-      // Incorrect format - needs correction
+      // Incorrect format - needs correction (doesn't use worker tools)
       {
         weight: 0.5,
-        text: 'I think we should implement this feature using TypeScript. It would be better for type safety.'
+        text: 'I think we should implement this feature using TypeScript. It would provide better type safety and maintainability.'
       },
       {
         weight: 0.5,
-        text: 'This is a good approach. Let me think about how to proceed with the implementation.'
+        text: 'This approach looks good. I\'m considering the best way to structure the code for optimal performance.'
       },
       {
-        weight: 0.5,
-        text: 'I\'ve reviewed the code and it looks mostly correct, but there might be some edge cases to consider.'
-      },
-      // With code blocks
-      {
-        weight: 0.1,
-        text: 'Here\'s how to run it:\n```bash\nnpm start\n```\n\nDONE!'
+        weight: 0.3,
+        text: 'I\'ve reviewed the requirements. There are some edge cases to consider before proceeding with implementation.'
       },
     ];
 
     const workerResponses = [
       {
         weight: 3,
-        text: 'I\'ve implemented the feature as requested. The code is working correctly.'
+        text: 'I\'ve implemented the requested feature. Here\'s what I did:\n\n1. Created the main function\n2. Added error handling\n3. Wrote unit tests\n\nAll tests are passing and the implementation is ready.'
       },
       {
         weight: 3,
-        text: 'The function has been created. Here\'s what I did:\n\n```typescript\nfunction solve() {\n  // Implementation\n  return result;\n}\n```\n\nAll tests are passing.'
+        text: 'Implementation complete! I\'ve added the functionality with the following approach:\n\n```typescript\nfunction processData(input: string): Result {\n  // Validation\n  if (!input) throw new Error(\'Invalid input\');\n  \n  // Processing logic\n  const result = transform(input);\n  return result;\n}\n```\n\nThe code is tested and working correctly.'
       },
       {
         weight: 2,
-        text: 'Task completed successfully. I\'ve added the requested functionality and verified it works as expected.'
+        text: 'Task completed successfully. I\'ve:\n- Implemented the core functionality\n- Added comprehensive error handling\n- Written test cases\n- Verified all edge cases work as expected\n\nThe feature is ready for use.'
       },
       {
         weight: 2,
-        text: 'Implementation complete. The feature is ready and I\'ve tested it with various inputs.'
+        text: 'Done! The implementation is complete. I\'ve tested it with various inputs including edge cases, and everything works as expected. The code follows best practices and includes proper documentation.'
+      },
+      {
+        weight: 2,
+        text: 'Feature implemented and tested. Here\'s a summary:\n\n**Changes made:**\n- Added new module with requested functionality\n- Integrated with existing codebase\n- Added validation and error handling\n\n**Testing:**\n- Unit tests: ✓ Passing\n- Integration tests: ✓ Passing\n- Edge cases: ✓ Handled\n\nReady for review!'
       },
       {
         weight: 1,
-        text: 'Done! The changes have been implemented and are working correctly.'
+        text: 'Implementation finished! I\'ve created a clean, efficient solution that handles all the requirements. The code is well-documented and includes error handling for common failure scenarios.'
+      },
+      {
+        weight: 1,
+        text: 'All set! I\'ve completed the implementation with:\n- Clean, maintainable code\n- Proper type safety\n- Comprehensive test coverage\n- Documentation\n\nThe feature is working correctly.'
       },
     ];
 
@@ -95,11 +121,11 @@ export class ClaudeClient {
     const totalWeight = responses.reduce((sum, r) => sum + r.weight, 0);
     let random = Math.random() * totalWeight;
 
-    let selectedText = responses[0].text;
+    let selectedResponse = responses[0];
     for (const response of responses) {
       random -= response.weight;
       if (random <= 0) {
-        selectedText = response.text;
+        selectedResponse = response;
         break;
       }
     }
@@ -110,16 +136,49 @@ export class ClaudeClient {
     if (useThinking) {
       content.push({
         type: 'thinking',
-        thinking: 'Mock thinking: Analyzing the request and determining the appropriate response format.',
+        thinking: 'Mock thinking: Analyzing the task requirements and determining the best approach. Considering which tools to use and how to delegate work to Worker effectively.',
       } as any);
     }
 
     // Add text content
     content.push({
       type: 'text',
-      text: selectedText,
+      text: selectedResponse.text,
       citations: [],
     });
+
+    // Add tool use if specified
+    if ((selectedResponse as any).useTool && (selectedResponse as any).toolName) {
+      const toolName = (selectedResponse as any).toolName;
+      const toolId = 'toolu_mock_' + Date.now() + Math.random().toString(36).substring(7);
+
+      let toolInput: any = {};
+      if (toolName === 'call_worker') {
+        toolInput = {
+          system_prompt: 'You are a skilled developer. Implement the requested feature with clean, well-tested code.',
+          instruction: 'Please implement the feature as discussed.',
+          model: 'sonnet',
+        };
+      } else if (toolName === 'call_worker_with_file') {
+        toolInput = {
+          system_prompt_file: '/tmp/system_prompt.txt',
+          instruction: 'Please implement the feature using the context provided.',
+          model: 'sonnet',
+        };
+      } else if (toolName === 'tell_worker') {
+        toolInput = {
+          message: 'Continue with the implementation. Focus on edge cases and error handling.',
+          model: 'sonnet',
+        };
+      }
+
+      content.push({
+        type: 'tool_use',
+        id: toolId,
+        name: toolName,
+        input: toolInput,
+      } as any);
+    }
 
     return {
       id: 'mock-msg-' + Date.now(),
@@ -156,17 +215,20 @@ export class ClaudeClient {
       if (block.type === 'thinking' && onChunk) {
         const thinking = (block as any).thinking || '';
         // Stream thinking in chunks
-        for (let i = 0; i < thinking.length; i += 10) {
+        for (let i = 0; i < thinking.length; i += 15) {
           await delay(20);
-          onChunk(thinking.slice(i, i + 10), 'thinking');
+          onChunk(thinking.slice(i, i + 15), 'thinking');
         }
       } else if (block.type === 'text' && onChunk) {
         const text = block.text;
         // Stream text in chunks
-        for (let i = 0; i < text.length; i += 5) {
+        for (let i = 0; i < text.length; i += 8) {
           await delay(30);
-          onChunk(text.slice(i, i + 5), 'text');
+          onChunk(text.slice(i, i + 8), 'text');
         }
+      } else if (block.type === 'tool_use') {
+        // Tool use blocks appear instantly (not streamed character by character)
+        await delay(50);
       }
     }
 

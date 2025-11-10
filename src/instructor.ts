@@ -253,6 +253,8 @@ Worker's conversation history is NOT persisted between sessions. When resuming:
 
       // Execute tools and collect results
       const toolResults: any[] = [];
+      let usedWorkerTool = false; // Track if worker tool was used
+
       for (const toolUse of toolUses) {
         // Log tool execution with parameters
         const { Display } = await import('./display.js');
@@ -291,16 +293,19 @@ Worker's conversation history is NOT persisted between sessions. When resuming:
         else if (toolUse.name === 'call_worker') {
           const result = await this.handleCallWorkerTool(toolUse);
           toolResults.push(result);
+          usedWorkerTool = true; // Worker tool used - should end Instructor's turn
         }
         // Handle call_worker_with_file tool
         else if (toolUse.name === 'call_worker_with_file') {
           const result = await this.handleCallWorkerWithFileTool(toolUse);
           toolResults.push(result);
+          usedWorkerTool = true; // Worker tool used - should end Instructor's turn
         }
         // Handle tell_worker tool
         else if (toolUse.name === 'tell_worker') {
           const result = await this.handleTellWorkerTool(toolUse);
           toolResults.push(result);
+          usedWorkerTool = true; // Worker tool used - should end Instructor's turn
         }
         // Handle set_worker_timeout tool
         else if (toolUse.name === 'set_worker_timeout') {
@@ -333,6 +338,12 @@ Worker's conversation history is NOT persisted between sessions. When resuming:
             onTextChunk(block.text);
           }
         }
+      }
+
+      // If a worker tool was used, end Instructor's turn
+      // Control should pass to Worker
+      if (usedWorkerTool) {
+        break;
       }
     }
 
