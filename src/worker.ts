@@ -48,8 +48,46 @@ export class WorkerManager {
     // Git commands are permanently forbidden for Worker
     const permanentlyForbiddenTools = ['git_command'];
     this.toolExecutor = new ToolExecutor(workDir, allowedToolNames, permanentlyForbiddenTools);
-    // Simple default - Instructor can override by instructing Worker
+    // Default system prompt - can be overridden via setSystemPrompt
     this.systemPrompt = 'You are a helpful AI assistant that follows instructions to implement tasks. You have access to tools for file operations and command execution.';
+  }
+
+  /**
+   * Set Worker's system prompt dynamically
+   */
+  setSystemPrompt(prompt: string): void {
+    this.systemPrompt = prompt;
+  }
+
+  /**
+   * Reset Worker's context and call with fresh instruction
+   * @param instruction Main instruction for Worker
+   * @param systemPrompt Custom system prompt (optional, uses existing if not provided)
+   * @param contextMessages Optional background context messages
+   */
+  async resetAndCall(
+    instruction: string,
+    model: string,
+    systemPrompt?: string,
+    contextMessages?: Message[],
+    onTextChunk?: (chunk: string) => void,
+    abortSignal?: AbortSignal
+  ): Promise<string> {
+    // Reset conversation history
+    this.conversationHistory = [];
+
+    // Update system prompt if provided
+    if (systemPrompt) {
+      this.systemPrompt = systemPrompt;
+    }
+
+    // Add context messages if provided
+    if (contextMessages && contextMessages.length > 0) {
+      this.conversationHistory.push(...contextMessages);
+    }
+
+    // Process the instruction with fresh context
+    return await this.processInstruction(instruction, model, onTextChunk, abortSignal);
   }
 
   async processInstruction(

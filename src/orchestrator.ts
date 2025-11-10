@@ -358,7 +358,7 @@ export class Orchestrator {
 
       Display.newline();
       Display.instructorStatus(
-        response.workerModel || this.config.workerModel,
+        'N/A', // Model is now determined by worker tools, not by response
         response.shouldContinue,
         response.needsCorrection || false
       );
@@ -415,8 +415,11 @@ export class Orchestrator {
       return response;
     }
 
-    Display.warning('⚠️  Instructor did not use the correct communication format.');
-    Display.system('   To communicate with Worker, use: "Tell worker: [instruction]"');
+    Display.warning('⚠️  Instructor did not use worker tools.');
+    Display.system('   To work with Worker, use one of these tools:');
+    Display.system('   - call_worker(system_prompt, instruction, model?) - Reset Worker context');
+    Display.system('   - call_worker_with_file(system_prompt_file, instruction, model?) - Reset with file');
+    Display.system('   - tell_worker(message, model?) - Continue Worker conversation');
     Display.system('   To finish the task, respond with: "DONE"');
     Display.newline();
 
@@ -430,7 +433,7 @@ export class Orchestrator {
       Display.header(InstanceType.INSTRUCTOR, `Correction Attempt ${attempt}/${maxCorrectionAttempts}`);
 
       correctedResponse = await this.callInstructor(
-        'Please continue. You should work with *Worker* agent if you cannot finish the task by 1 round. Remember to use "Tell worker: [instruction]" to instruct the Worker, or "DONE" to finish.',
+        'Please continue. You should work with Worker agent using the worker tools (call_worker, call_worker_with_file, or tell_worker). Remember to use these tools to delegate work to Worker, or respond with "DONE" to finish.',
         'correction'
       );
 
@@ -441,8 +444,9 @@ export class Orchestrator {
 
       // Check if correction succeeded
       if (!correctedResponse.needsCorrection) {
-        // Success! Check if we have valid content
-        if (correctedResponse.instruction.length > 0 || !correctedResponse.shouldContinue) {
+        // Success! Check if we have valid worker call or done
+        const callWorkerParams = this.instructor.getCallWorkerParams();
+        if (callWorkerParams || !correctedResponse.shouldContinue) {
           Display.success(`✓ Correction successful on attempt ${attempt}`);
           Display.newline();
           return correctedResponse;
@@ -462,17 +466,39 @@ export class Orchestrator {
 
     return {
       thinking: '',
-      instruction: '',
-      workerModel: response.workerModel,
-      shouldContinue: false, // Force stop instead of waiting for user
+      shouldContinue: false, // Force stop
       needsCorrection: false,
     };
   }
 
-  private async callWorker(instruction: string, model: string): Promise<string> {
-    Display.header(InstanceType.WORKER, `Processing Instruction (Model: ${model})`);
+  /**
+   * Call Worker with structured parameters from worker tools
+   * Handles three tool types:
+   * - call_worker: Reset context with inline system prompt
+   * - call_worker_with_file: Reset context with system prompt from file
+   * - tell_worker: Continue existing conversation
+   */
+  private async callWorkerWithParams(params: import('./types.js').CallWorkerParams): Promise<string> {
+    const model = params.model || this.config.workerModel;
+    const toolName = params.tool_name;
+
+    let displayMode: string;
+    if (toolName === 'call_worker' || toolName === 'call_worker_with_file') {
+      displayMode = 'call_worker (reset context)';
+    } else {
+      displayMode = 'tell_worker (continue)';
+    }
+
+    Display.header(InstanceType.WORKER, `Processing Instruction (Model: ${model}, Mode: ${displayMode})`);
     Display.system('Instruction from Instructor:');
-    Display.system(Display.truncate(instruction));
+
+    if (toolName === 'call_worker' || toolName === 'call_worker_with_file') {
+      Display.system(Display.truncate(params.instruction || ''));
+      Display.system('Mode: Resetting Worker context with new system prompt');
+    } else {
+      Display.system(Display.truncate(params.message || ''));
+      Display.system('Mode: Continuing Worker conversation');
+    }
     Display.newline();
 
     let workerTextBuffer = '';
@@ -494,21 +520,38 @@ export class Orchestrator {
       }
     }, 1000);
 
+    const onTextChunk = (chunk: string) => {
+      if (this.interrupted) return;
+      lastTokenTime = Date.now();
+      if (workerTextBuffer === '') {
+        Display.system('Response:');
+      }
+      workerTextBuffer += chunk;
+      Display.text(InstanceType.WORKER, chunk);
+    };
+
     try {
-      const workerResponse = await this.worker.processInstruction(
-        instruction,
-        model,
-        (chunk) => {
-          if (this.interrupted) return;
-          lastTokenTime = Date.now();
-          if (workerTextBuffer === '') {
-            Display.system('Response:');
-          }
-          workerTextBuffer += chunk;
-          Display.text(InstanceType.WORKER, chunk);
-        },
-        this.currentAbortController.signal
-      );
+      let workerResponse: string;
+
+      if (toolName === 'call_worker' || toolName === 'call_worker_with_file') {
+        // Reset Worker context and call with fresh instruction
+        workerResponse = await this.worker.resetAndCall(
+          params.instruction || '',
+          model,
+          params.system_prompt,
+          undefined,  // No context_messages in new API
+          onTextChunk,
+          this.currentAbortController.signal
+        );
+      } else {
+        // tell_worker mode: continue existing conversation
+        workerResponse = await this.worker.processInstruction(
+          params.message || '',
+          model,
+          onTextChunk,
+          this.currentAbortController.signal
+        );
+      }
 
       clearInterval(timeoutCheckInterval);
       Display.newline();
@@ -524,9 +567,9 @@ export class Orchestrator {
 
       if (workerTimedOut && (error.name === 'AbortError' || error.message?.includes('aborted'))) {
         Display.newline();
-        Display.system('⏱️  Worker response timed out after 60s of inactivity');
+        Display.system(`⏱️  Worker response timed out after ${this.workerTimeoutMs / 1000}s of inactivity`);
         Display.newline();
-        return workerTextBuffer ? `${workerTextBuffer} [TIMEOUT after 60s]` : '[No response received - TIMEOUT after 60s]';
+        return workerTextBuffer ? `${workerTextBuffer} [TIMEOUT after ${this.workerTimeoutMs / 1000}s]` : `[No response received - TIMEOUT after ${this.workerTimeoutMs / 1000}s]`;
       }
 
       throw error;
@@ -609,7 +652,7 @@ export class Orchestrator {
           await this.saveSession();
         }
 
-        // Step 3: Handle correction if needed (IMPORTANT: Check this every loop iteration)
+        // Handle correction if needed (check before proceeding to worker)
         if (instructorResponse?.needsCorrection) {
           instructorResponse = await this.handleNeedsCorrection(instructorResponse);
           if (!instructorResponse) continue;
@@ -620,16 +663,27 @@ export class Orchestrator {
           continue;
         }
 
-        // Validate we have an instruction before proceeding
-        if (!instructorResponse?.instruction || instructorResponse.instruction.length === 0) {
-          Display.warning('⚠️  No instruction to send to Worker. Returning to user input...');
+        // Extract call_worker params from Instructor's conversation history
+        const callWorkerParams = this.instructor.getCallWorkerParams();
+
+        // Validate we have call_worker params before proceeding
+        if (!callWorkerParams) {
+          Display.warning('⚠️  Instructor did not use worker tools. Returning to user input...');
           Display.newline();
           instructorResponse = null;
           continue;
         }
 
-        // Step 4: Worker-Instructor conversation loop
-        while (instructorResponse?.shouldContinue && instructorResponse?.instruction) {
+        // Step 3: Worker-Instructor conversation loop
+        while (instructorResponse?.shouldContinue) {
+          // Extract call_worker params (check each iteration)
+          const callWorkerParams = this.instructor.getCallWorkerParams();
+          if (!callWorkerParams) {
+            Display.warning('⚠️  No call_worker params found. Ending Worker-Instructor loop...');
+            Display.newline();
+            break;
+          }
+
           // Check remaining rounds
           if (this.remainingRounds !== Infinity && this.remainingRounds <= 0) {
             Display.error(`No remaining rounds. Stopping.`);
@@ -644,13 +698,10 @@ export class Orchestrator {
             this.remainingRounds--;
           }
 
-          // Call Worker
+          // Call Worker with structured params
           let workerResponse: string;
           try {
-            workerResponse = await this.callWorker(
-              instructorResponse.instruction,
-              instructorResponse.workerModel || this.config.workerModel
-            );
+            workerResponse = await this.callWorkerWithParams(callWorkerParams);
           } catch (error: any) {
             if (error.message === 'Interrupted') {
               instructorResponse = null;

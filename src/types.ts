@@ -33,10 +33,18 @@ export interface ConversationContext {
   round: number;
 }
 
+export interface CallWorkerParams {
+  tool_name: 'call_worker' | 'call_worker_with_file' | 'tell_worker';
+  system_prompt?: string;  // For call_worker
+  system_prompt_file?: string;  // For call_worker_with_file
+  instruction?: string;  // For call_worker and call_worker_with_file
+  message?: string;  // For tell_worker
+  model?: string;
+}
+
 export interface InstructorResponse {
   thinking?: string;
-  instruction: string;
-  workerModel?: string;
+  callWorker?: CallWorkerParams;  // New: structured call to Worker (replaces instruction field)
   shouldContinue: boolean;
   needsCorrection?: boolean;  // True if Instructor needs to be prompted about correct communication
 }

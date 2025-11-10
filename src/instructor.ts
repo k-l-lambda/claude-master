@@ -60,59 +60,98 @@ export class InstructorManager {
 You are the Instructor AI. Your role is to:
 1. Read and understand task requirements (you have file reading tools)
 2. Plan and break down tasks
-3. Instruct the Worker AI to execute specific implementation actions
-4. Review Worker's responses and provide next instructions
-5. Decide which model the Worker should use (opus/sonnet/haiku)
+3. Execute tasks with Worker AI using worker tools
+4. Review Worker's responses and call Worker again as needed
+5. Manage Worker's context and system prompt for each call
 
 You have access to file reading, writing, and git tools to understand the task and manage the project.
-The Worker will handle the actual implementation details.
+Worker handles the actual implementation details based on your instructions.
 
-When you want the Worker to do something, use the format:
-"Tell worker: [your instruction here]"
+## Calling Worker
 
+You have three tools to work with Worker:
+
+### 1. call_worker(system_prompt, instruction, model?)
+Resets Worker's context completely and starts fresh with a new system prompt and instruction.
+Use when:
+- Starting a new task
+- Worker's context is cluttered or too large
+- You need Worker to focus on a completely new task
+
+Example:
+\`\`\`
+call_worker(
+  system_prompt='You are a backend developer working on a Node.js API. Focus on security best practices and clean code.',
+  instruction='Implement user authentication with JWT tokens',
+  model='sonnet'
+)
+\`\`\`
+
+### 2. call_worker_with_file(system_prompt_file, instruction, model?)
+Like call_worker, but loads the system prompt from a file. Useful when you have complex system prompts saved.
+Use when:
+- You have a detailed system prompt prepared in a file
+- You want to reuse the same system prompt across multiple calls
+
+Example:
+\`\`\`
+call_worker_with_file(
+  system_prompt_file='/path/to/system_prompt.txt',
+  instruction='Implement user authentication with JWT tokens',
+  model='sonnet'
+)
+\`\`\`
+
+### 3. tell_worker(message, model?)
+Continues Worker's existing conversation without resetting context. Worker maintains its history.
+Use when:
+- Iterating on current task
+- Worker needs follow-up instructions
+- Building upon Worker's previous work
+
+Example:
+\`\`\`
+tell_worker(
+  message='Add rate limiting to prevent brute force attacks',
+  model='sonnet'
+)
+\`\`\`
+
+## Model Selection
+- **opus**: Most capable, best for complex/novel tasks (claude-opus-4-1-20250805)
+- **sonnet**: Balanced performance, good for most tasks (claude-sonnet-4-5-20250929)
+- **haiku**: Fast and efficient, good for simple/routine tasks (claude-3-5-haiku-20241022)
+
+## Worker Context Strategy
+- **call_worker / call_worker_with_file**: Clears Worker's memory - use when starting new tasks
+- **tell_worker**: Maintains Worker's context - use for iterative work
+- You control Worker's entire context through your choice of tools
+
+## Other Tools
+- **set_worker_timeout**: Adjust Worker's inactivity timeout (default 60s, range 30-600s)
+  - Use longer timeout (120-300s) for complex tasks requiring more thinking time
+
+## Task Completion
 When the task is complete, respond with "DONE" to end the session.
 
-You can specify which model the Worker should use by including:
-- "use opus" or "model: opus" for claude-opus-4-1-20250805
-- "use sonnet" or "model: sonnet" for claude-sonnet-4-5-20250929
-- "use haiku" or "model: haiku" for claude-3-5-haiku-20241022
-
-## Context Management
-
-**Worker Context**: Worker's conversation history is NOT persisted between sessions. When resuming a session:
-- You need to re-explain the task context to Worker
-- Worker starts with a clean slate each time
-- You are responsible for providing Worker with necessary background
-
-**Managing Worker Context During a Session**:
-You can manage Worker's context using these tools:
-- get_worker_context_size: Check how many tokens Worker's history is using
-- compact_worker_context: Trim Worker's history to keep only the most recent N rounds (default: 10)
-  - Use when Worker's context > 100k tokens (50% of limit)
-  - REQUIRED when Worker returns "[ERROR: Worker context is too long]"
-  - This keeps recent context while reducing token usage
-  - Worker will still remember the last N rounds of conversation
-  - Example: compact_worker_context with keep_rounds=5 keeps last 5 rounds only
-- set_worker_timeout: Set Worker's inactivity timeout (default: 60 seconds)
-  - Worker aborts if no token output for this duration
-  - Use 120-300s for complex tasks requiring more thinking time
-  - Use 30-60s for simple tasks
-  - Range: 30-600 seconds
-
-**Handling Worker Errors**:
-If Worker returns a message starting with "[ERROR: ...]", analyze the error message carefully:
-- The error message contains diagnostic information and suggested actions
+## Handling Worker Errors
+If Worker returns a message starting with "[ERROR: ...]":
+- Analyze the error message carefully (contains diagnostic info and suggested actions)
 - Follow the suggested actions in the error message
 - Most errors are recoverable - retry after taking corrective action
 - Authentication errors require user intervention
 
-**Your Context**: Your conversation history may be compacted when approaching token limits (50k+ tokens):
+## Your Context Management
+Your conversation history may be compacted when approaching token limits (50k+ tokens):
 - User can trigger compaction with "[compact]" command
 - System will auto-compact near 50k tokens (25% of 200k limit)
 - After compaction, your history is replaced with a detailed summary
-- You can manage Worker's context by trimming when needed
 
-**Note**: If Worker's context grows too large or becomes cluttered, use compact_worker_context to trim old context while preserving recent conversation.`;
+## Session Resumption
+Worker's conversation history is NOT persisted between sessions. When resuming:
+- Use instruction_only mode to provide fresh context
+- Worker starts with a clean slate each session
+- You are responsible for re-establishing context as needed`;
   }
 
   async processUserInput(
@@ -145,9 +184,10 @@ If Worker returns a message starting with "[ERROR: ...]", analyze the error mess
       throw new Error('Cannot process empty worker response');
     }
 
+    // Add Worker's response directly to conversation history
     this.conversationHistory.push({
       role: 'user',
-      content: `Worker says: ${workerResponse}`,
+      content: `Worker's response:\n${workerResponse}`,
     });
 
     return await this.executeWithTools(onThinkingChunk, onTextChunk, abortSignal);
@@ -247,9 +287,24 @@ If Worker returns a message starting with "[ERROR: ...]", analyze the error mess
           const result = await this.handlePermissionTool(toolUse);
           toolResults.push(result);
         }
-        // Handle Worker context management tools
-        else if (toolUse.name === 'compact_worker_context' || toolUse.name === 'get_worker_context_size' || toolUse.name === 'set_worker_timeout') {
-          const result = await this.handleWorkerContextTool(toolUse);
+        // Handle call_worker tool
+        else if (toolUse.name === 'call_worker') {
+          const result = await this.handleCallWorkerTool(toolUse);
+          toolResults.push(result);
+        }
+        // Handle call_worker_with_file tool
+        else if (toolUse.name === 'call_worker_with_file') {
+          const result = await this.handleCallWorkerWithFileTool(toolUse);
+          toolResults.push(result);
+        }
+        // Handle tell_worker tool
+        else if (toolUse.name === 'tell_worker') {
+          const result = await this.handleTellWorkerTool(toolUse);
+          toolResults.push(result);
+        }
+        // Handle set_worker_timeout tool
+        else if (toolUse.name === 'set_worker_timeout') {
+          const result = await this.handleWorkerTimeoutTool(toolUse);
           toolResults.push(result);
         }
         else {
@@ -305,80 +360,25 @@ If Worker returns a message starting with "[ERROR: ...]", analyze the error mess
 
   private parseInstructorResponse(text: string, thinking: string): InstructorResponse {
     // Check if Instructor is done - look for DONE as a standalone statement AT THE END
-    // Allow for markdown formatting like **DONE**, _DONE_, or plain DONE
-    // DONE must appear at the END of response, not at the beginning
     const trimmedText = text.trim();
     const lastLine = trimmedText.split('\n').slice(-3).join('\n'); // Check last 3 lines
-
-    // Match DONE only when it's:
-    // - Formatted: **DONE**, __DONE__, _DONE_ (anywhere in last 3 lines)
-    // - Or standalone: DONE at the very end, optionally followed by markdown code fence
-    // Use (?:^|\n) to match start-of-string OR after newline, ensuring it's on last line
-    // Allow optional ``` after DONE (for markdown code blocks)
     const isDone = /\*\*DONE\*\*|__DONE__|_DONE__|(?:^|\n)\s*DONE[\s.!]*$/.test(lastLine);
 
-    // Extract instruction and model from "Tell worker" directive
-    // Supports multiple formats:
-    // - "Tell worker: instruction"
-    // - "Tell worker (use sonnet): instruction"
-    // - "Tell worker (model: opus): instruction"
-    let instruction = '';
-    let workerModel = this.config.workerModel;
+    const shouldContinue = !isDone;
 
-    // Try to match "Tell worker" with optional model specification in parentheses
-    const tellWorkerWithModelMatch = text.match(/tell\s+worker\s*\((?:use\s+)?(?:model:\s*)?(\w+)\)\s*:\s*([\s\S]*)/i);
-    const tellWorkerSimpleMatch = text.match(/tell\s+worker:\s*([\s\S]*)/i);
-
-    if (tellWorkerWithModelMatch) {
-      // Format: "Tell worker (use sonnet): instruction" or "Tell worker (model: opus): instruction"
-      const modelName = tellWorkerWithModelMatch[1].toLowerCase();
-      instruction = tellWorkerWithModelMatch[2].trim();
-
-      // Map model name to full model ID
-      if (modelName === 'opus') {
-        workerModel = 'claude-opus-4-1-20250805';
-      } else if (modelName === 'haiku') {
-        workerModel = 'claude-3-5-haiku-20241022';
-      } else if (modelName === 'sonnet') {
-        workerModel = 'claude-sonnet-4-5-20250929';
-      }
-    } else if (tellWorkerSimpleMatch) {
-      // Format: "Tell worker: instruction"
-      instruction = tellWorkerSimpleMatch[1].trim();
-
-      // Check for model hints in the instruction text itself
-      // Look for patterns like "use sonnet", "model: opus", etc.
-      if (instruction.toLowerCase().includes('use opus') || instruction.toLowerCase().includes('model: opus')) {
-        workerModel = 'claude-opus-4-1-20250805';
-      } else if (instruction.toLowerCase().includes('use haiku') || instruction.toLowerCase().includes('model: haiku')) {
-        workerModel = 'claude-3-5-haiku-20241022';
-      } else if (instruction.toLowerCase().includes('use sonnet') || instruction.toLowerCase().includes('model: sonnet')) {
-        workerModel = 'claude-sonnet-4-5-20250929';
-      }
-    } else {
-      // No "Tell worker" directive found
-      if (!isDone) {
-        // Instructor didn't say "tell worker" and didn't say "DONE"
-        // This means the instruction is incomplete
-        instruction = ''; // Don't send to worker
-      } else {
-        // DONE was said, so we're finished
-        instruction = '';
+    // Check if Instructor used worker tools when it should continue
+    let needsCorrection = false;
+    if (shouldContinue) {
+      const callWorkerParams = this.getCallWorkerParams();
+      if (!callWorkerParams) {
+        // Instructor should continue but didn't use call_worker, call_worker_with_file, or tell_worker
+        needsCorrection = true;
       }
     }
 
-    // If no instruction and not done, it means we need to prompt Instructor to continue
-    const needsCorrection = !isDone && instruction.length === 0 && text.trim().length > 0;
-
-    // Continue if not done AND has instruction (normal flow)
-    // Note: needsCorrection doesn't set shouldContinue=true because correction
-    // is handled separately by orchestrator - it will prompt and get new response
-    const shouldContinue = !isDone;
-
     return {
       thinking,
-      instruction,
-      workerModel,
+      callWorker: undefined,  // Will be extracted by orchestrator from tool results
       shouldContinue,
       needsCorrection,
     };
@@ -386,6 +386,42 @@ If Worker returns a message starting with "[ERROR: ...]", analyze the error mess
 
   getConversationHistory(): Message[] {
     return [...this.conversationHistory];
+  }
+
+  /**
+   * Extract call_worker parameters from most recent conversation
+   * Looks through recent conversation history for call_worker tool results
+   */
+  getCallWorkerParams(): import('./types.js').CallWorkerParams | null {
+    // Search backwards through conversation history for call_worker tool result
+    for (let i = this.conversationHistory.length - 1; i >= 0; i--) {
+      const msg = this.conversationHistory[i];
+
+      // Look for user messages (tool results)
+      if (msg.role === 'user' && Array.isArray(msg.content)) {
+        for (const block of msg.content) {
+          // Tool results have type 'tool_result' and content property
+          if ((block as any).type === 'tool_result' && typeof (block as any).content === 'string') {
+            try {
+              const parsed = JSON.parse((block as any).content);
+              if (parsed._call_worker_params) {
+                return parsed._call_worker_params;
+              }
+            } catch (e) {
+              // Not JSON or doesn't contain call_worker_params
+              continue;
+            }
+          }
+        }
+      }
+
+      // Stop searching once we hit an assistant message without tools
+      if (msg.role === 'assistant') {
+        break;
+      }
+    }
+
+    return null;
   }
 
   restoreConversationHistory(messages: Message[]): void {
@@ -462,149 +498,151 @@ If Worker returns a message starting with "[ERROR: ...]", analyze the error mess
   /**
    * Handle Worker context management tools
    */
-  private async handleWorkerContextTool(toolUse: any): Promise<any> {
+  /**
+   * Handle call_worker tool - resets Worker context with inline system prompt
+   */
+  private async handleCallWorkerTool(toolUse: any): Promise<any> {
     try {
-      if (!this.workerManager) {
+      const input = toolUse.input as any;
+
+      // Return tool result indicating call_worker was invoked
+      // The actual Worker call will be handled by orchestrator
+      return {
+        type: 'tool_result',
+        tool_use_id: toolUse.id,
+        content: JSON.stringify({
+          _call_worker_params: {
+            tool_name: 'call_worker',
+            system_prompt: input.system_prompt,
+            instruction: input.instruction,
+            model: input.model,
+          }
+        }),
+      };
+    } catch (error) {
+      return {
+        type: 'tool_result',
+        tool_use_id: toolUse.id,
+        content: error instanceof Error ? error.message : String(error),
+        is_error: true,
+      };
+    }
+  }
+
+  /**
+   * Handle call_worker_with_file tool - resets Worker context with system prompt from file
+   */
+  private async handleCallWorkerWithFileTool(toolUse: any): Promise<any> {
+    try {
+      const input = toolUse.input as any;
+
+      // Read system prompt from file
+      const fs = await import('fs/promises');
+      let systemPrompt: string;
+      try {
+        systemPrompt = await fs.readFile(input.system_prompt_file, 'utf-8');
+      } catch (error) {
         return {
           type: 'tool_result',
           tool_use_id: toolUse.id,
-          content: 'Error: Worker manager not initialized. Cannot manage Worker context.',
+          content: `Error reading system prompt file: ${error instanceof Error ? error.message : String(error)}`,
           is_error: true,
         };
       }
 
-      if (toolUse.name === 'compact_worker_context') {
-        // Import TokenCounter here to avoid circular dependencies
-        const { TokenCounter } = await import('./token-counter.js');
-
-        const keepRounds = toolUse.input.keep_rounds || 10;
-        const reason = toolUse.input.reason || 'Reduce context size';
-
-        const messages = this.workerManager.getConversationHistory();
-        const oldSize = TokenCounter.countConversationTokens(messages);
-        const oldCount = messages.length;
-
-        // Count actual rounds: count user messages that are instructions (string content)
-        // Each round starts with a user instruction (string), not tool_result (array)
-        let roundCount = 0;
-        const roundStartIndices: number[] = [];
-
-        for (let i = 0; i < messages.length; i++) {
-          const msg = messages[i];
-          if (msg.role === 'user' && typeof msg.content === 'string') {
-            // This is an instruction, not a tool_result
-            roundCount++;
-            roundStartIndices.push(i);
+      // Return tool result indicating call_worker_with_file was invoked
+      return {
+        type: 'tool_result',
+        tool_use_id: toolUse.id,
+        content: JSON.stringify({
+          _call_worker_params: {
+            tool_name: 'call_worker_with_file',
+            system_prompt: systemPrompt,
+            instruction: input.instruction,
+            model: input.model,
           }
-        }
+        }),
+      };
+    } catch (error) {
+      return {
+        type: 'tool_result',
+        tool_use_id: toolUse.id,
+        content: error instanceof Error ? error.message : String(error),
+        is_error: true,
+      };
+    }
+  }
 
-        if (roundCount <= keepRounds) {
-          return {
-            type: 'tool_result',
-            tool_use_id: toolUse.id,
-            content: `ℹ️  Worker context is already small (${roundCount} rounds, ${messages.length} messages).
-No compaction needed.
-Current size: ${oldSize.toLocaleString()} tokens (estimated)`,
-          };
-        }
+  /**
+   * Handle tell_worker tool - continues Worker's existing conversation
+   */
+  private async handleTellWorkerTool(toolUse: any): Promise<any> {
+    try {
+      const input = toolUse.input as any;
 
-        // Keep messages from the (roundCount - keepRounds)th round onwards
-        const keepFromIndex = roundStartIndices[roundCount - keepRounds];
-        const trimmedMessages = messages.slice(keepFromIndex);
-        this.workerManager.restoreConversationHistory(trimmedMessages);
-
-        const newSize = TokenCounter.countConversationTokens(trimmedMessages);
-        const newCount = trimmedMessages.length;
-        const savedTokens = oldSize - newSize;
-        const savedPercentage = Math.round((savedTokens / oldSize) * 100);
-
-        return {
-          type: 'tool_result',
-          tool_use_id: toolUse.id,
-          content: `✓ Worker context has been compacted successfully.
-Reason: ${reason}
-Kept: Last ${keepRounds} rounds (${newCount} messages)
-Removed: ${oldCount - newCount} messages from ${roundCount - keepRounds} old rounds
-
-Token Usage:
-- Before: ${oldSize.toLocaleString()} tokens
-- After: ${newSize.toLocaleString()} tokens
-- Saved: ${savedTokens.toLocaleString()} tokens (${savedPercentage}%)
-
-💡 Worker still remembers the last ${keepRounds} rounds of conversation.`,
-        };
-      } else if (toolUse.name === 'get_worker_context_size') {
-        const { TokenCounter } = await import('./token-counter.js');
-
-        const messages = this.workerManager.getConversationHistory();
-        const usage = TokenCounter.formatTokenUsage(messages);
-        const messageCount = messages.length;
-
-        // Count actual rounds: count user messages that are instructions (string content)
-        let roundCount = 0;
-        for (const msg of messages) {
-          if (msg.role === 'user' && typeof msg.content === 'string') {
-            roundCount++;
+      // Return tool result indicating tell_worker was invoked
+      return {
+        type: 'tool_result',
+        tool_use_id: toolUse.id,
+        content: JSON.stringify({
+          _call_worker_params: {
+            tool_name: 'tell_worker',
+            message: input.message,
+            model: input.model,
           }
-        }
+        }),
+      };
+    } catch (error) {
+      return {
+        type: 'tool_result',
+        tool_use_id: toolUse.id,
+        content: error instanceof Error ? error.message : String(error),
+        is_error: true,
+      };
+    }
+  }
 
+  /**
+   * Handle set_worker_timeout tool
+   */
+  private async handleWorkerTimeoutTool(toolUse: any): Promise<any> {
+    try {
+      if (!this.workerTimeoutSetter) {
         return {
           type: 'tool_result',
           tool_use_id: toolUse.id,
-          content: `Worker Context Size:
-- Rounds: ${roundCount} (${messageCount} messages total)
-- Token usage: ${usage}
-
-💡 Recommendation:
-- Consider compacting if > 100k tokens (50% of limit)
-- Must compact if approaching 160k tokens (80% of limit)
-- Use compact_worker_context to trim to recent rounds`,
+          content: 'Error: Worker timeout setter not initialized.',
+          is_error: true,
         };
-      } else if (toolUse.name === 'set_worker_timeout') {
-        if (!this.workerTimeoutSetter) {
-          return {
-            type: 'tool_result',
-            tool_use_id: toolUse.id,
-            content: 'Error: Worker timeout setter not initialized.',
-            is_error: true,
-          };
-        }
+      }
 
-        const timeoutSeconds = toolUse.input.timeout_seconds;
-        const reason = toolUse.input.reason || 'No reason provided';
+      const timeoutSeconds = toolUse.input.timeout_seconds;
+      const reason = toolUse.input.reason || 'No reason provided';
 
-        // Validate timeout range
-        if (timeoutSeconds < 30 || timeoutSeconds > 600) {
-          return {
-            type: 'tool_result',
-            tool_use_id: toolUse.id,
-            content: `❌ Invalid timeout: ${timeoutSeconds}s. Timeout must be between 30 and 600 seconds.`,
-            is_error: true,
-          };
-        }
-
-        // Set the timeout
-        const timeoutMs = timeoutSeconds * 1000;
-        this.workerTimeoutSetter(timeoutMs);
-
+      // Validate timeout range
+      if (timeoutSeconds < 30 || timeoutSeconds > 600) {
         return {
           type: 'tool_result',
           tool_use_id: toolUse.id,
-          content: `✓ Worker timeout set to ${timeoutSeconds} seconds (${Math.floor(timeoutSeconds / 60)}m ${timeoutSeconds % 60}s)
+          content: `❌ Invalid timeout: ${timeoutSeconds}s. Timeout must be between 30 and 600 seconds.`,
+          is_error: true,
+        };
+      }
+
+      // Set the timeout
+      const timeoutMs = timeoutSeconds * 1000;
+      this.workerTimeoutSetter(timeoutMs);
+
+      return {
+        type: 'tool_result',
+        tool_use_id: toolUse.id,
+        content: `✓ Worker timeout set to ${timeoutSeconds} seconds (${Math.floor(timeoutSeconds / 60)}m ${timeoutSeconds % 60}s)
 Reason: ${reason}
 
 💡 Worker will abort if it doesn't output any token for ${timeoutSeconds} seconds.
 - Default: 60s (good for most tasks)
 - Complex tasks: 120-300s
 - Simple tasks: 30-60s`,
-        };
-      }
-
-      return {
-        type: 'tool_result',
-        tool_use_id: toolUse.id,
-        content: 'Unknown Worker context tool',
-        is_error: true,
       };
     } catch (error) {
       return {

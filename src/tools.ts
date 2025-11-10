@@ -187,30 +187,68 @@ export const instructorTools: Tool[] = [
     },
   },
   {
-    name: 'compact_worker_context',
-    description: 'Trim Worker\'s conversation history to keep only the most recent N rounds. Use this when Worker\'s context has grown too large (>100k tokens). This preserves recent context while reducing token usage. Default: keep last 10 rounds.',
+    name: 'call_worker',
+    description: 'Reset Worker\'s context and execute a task with fresh system prompt and instruction. Use this to start new tasks or when Worker\'s context is cluttered.',
     input_schema: {
       type: 'object',
       properties: {
-        keep_rounds: {
-          type: 'number',
-          description: 'Number of recent rounds to keep (default: 10). Each round = 1 instruction + 1 response pair.',
-        },
-        reason: {
+        system_prompt: {
           type: 'string',
-          description: 'Reason for compacting Worker context (optional, for logging)',
+          description: 'System prompt defining Worker\'s role and context (inline text).',
+        },
+        instruction: {
+          type: 'string',
+          description: 'The instruction/task for Worker to execute.',
+        },
+        model: {
+          type: 'string',
+          enum: ['opus', 'sonnet', 'haiku'],
+          description: 'Which Claude model Worker should use (default: config default). opus=most capable, sonnet=balanced, haiku=fast.',
         },
       },
-      required: [],
+      required: ['system_prompt', 'instruction'],
     },
   },
   {
-    name: 'get_worker_context_size',
-    description: 'Get the current size of Worker\'s conversation history in estimated tokens. Use this to monitor Worker\'s context usage and decide when to reset.',
+    name: 'call_worker_with_file',
+    description: 'Reset Worker\'s context and execute a task with system prompt loaded from a file. Use this when you have a complex system prompt saved in a file.',
     input_schema: {
       type: 'object',
-      properties: {},
-      required: [],
+      properties: {
+        system_prompt_file: {
+          type: 'string',
+          description: 'Path to file containing the system prompt for Worker.',
+        },
+        instruction: {
+          type: 'string',
+          description: 'The instruction/task for Worker to execute.',
+        },
+        model: {
+          type: 'string',
+          enum: ['opus', 'sonnet', 'haiku'],
+          description: 'Which Claude model Worker should use (default: config default). opus=most capable, sonnet=balanced, haiku=fast.',
+        },
+      },
+      required: ['system_prompt_file', 'instruction'],
+    },
+  },
+  {
+    name: 'tell_worker',
+    description: 'Send a message to Worker continuing the existing conversation. Worker maintains its context from previous rounds. Use this for iterative work building on previous interactions.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        message: {
+          type: 'string',
+          description: 'Message to send to Worker (continues existing conversation).',
+        },
+        model: {
+          type: 'string',
+          enum: ['opus', 'sonnet', 'haiku'],
+          description: 'Which Claude model Worker should use (default: config default). opus=most capable, sonnet=balanced, haiku=fast.',
+        },
+      },
+      required: ['message'],
     },
   },
   {
