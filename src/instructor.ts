@@ -83,7 +83,7 @@ Example:
 call_worker(
   system_prompt='You are a backend developer working on a Node.js API. Focus on security best practices and clean code.',
   instruction='Implement user authentication with JWT tokens',
-  model='sonnet'
+  model='haiku'
 )
 \`\`\`
 
@@ -98,7 +98,7 @@ Example:
 call_worker_with_file(
   system_prompt_file='/path/to/system_prompt.txt',
   instruction='Implement user authentication with JWT tokens',
-  model='sonnet'
+  model='haiku'
 )
 \`\`\`
 
@@ -113,16 +113,9 @@ Example:
 \`\`\`
 tell_worker(
   message='Add rate limiting to prevent brute force attacks',
-  model='sonnet'
+  model='haiku'
 )
 \`\`\`
-
-## Model Selection
-- **opus**: Most capable, best for complex/novel tasks
-- **sonnet**: Balanced performance, good for most tasks
-- **haiku**: Fast and efficient, good for simple/routine tasks (recommended)
-
-The system fetches the latest model IDs from the API on startup.
 
 ## Worker Context Strategy
 - **call_worker / call_worker_with_file**: Clears Worker's memory - use when starting new tasks
