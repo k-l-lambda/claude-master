@@ -18,6 +18,38 @@ export class Display {
     console.log(color(this.SEPARATOR));
   }
 
+  /**
+   * Get emoji for model type
+   */
+  private static getModelEmoji(model: string): string {
+    if (model.includes('opus')) return '🧠'; // Opus - powerful brain
+    if (model.includes('haiku')) return '⚡'; // Haiku - fast lightning
+    if (model.includes('sonnet')) return '🚀'; // Sonnet - balanced rocket
+    return '🤖'; // Default
+  }
+
+  /**
+   * Get emoji for display mode
+   */
+  private static getModeEmoji(mode: string): string {
+    if (mode.includes('reset') || mode.includes('call_worker')) return '🔄'; // Reset/fresh start
+    if (mode.includes('continue') || mode.includes('tell_worker')) return '💬'; // Continue conversation
+    return '🔧'; // Default tool
+  }
+
+  /**
+   * Display Worker header with model and mode emojis
+   */
+  static workerHeader(label: string, model: string, mode: string): void {
+    const color = this.WORKER_COLOR;
+    const modelEmoji = this.getModelEmoji(model);
+    const modeEmoji = this.getModeEmoji(mode);
+
+    console.log('\n' + color(this.SEPARATOR));
+    console.log(color.bold(`[WORKER] ${modeEmoji} ${label} ${modelEmoji}`));
+    console.log(color(this.SEPARATOR));
+  }
+
   static thinking(text: string): void {
     process.stdout.write(this.THINKING_COLOR(text));
   }
@@ -85,33 +117,13 @@ export class Display {
   /**
    * Print Instructor response status for debugging
    */
-  static instructorStatus(workerModel: string, shouldContinue: boolean, needsCorrection: boolean): void {
-    // Model emoji
-    let modelEmoji = '🚀'; // default sonnet
-    if (workerModel.includes('opus')) {
-      modelEmoji = '🧠'; // Opus - powerful brain
-    } else if (workerModel.includes('haiku')) {
-      modelEmoji = '⚡'; // Haiku - fast lightning
-    } else if (workerModel.includes('sonnet')) {
-      modelEmoji = '🚀'; // Sonnet - balanced rocket
-    }
-
+  static instructorStatus(shouldContinue: boolean, needsCorrection: boolean): void {
     // Continue emoji
     const continueEmoji = shouldContinue ? '▶️ ' : '⏹️ ';
 
     // Correction emoji
     const correctionEmoji = needsCorrection ? '⚠️ ' : '✅';
 
-    // Model short name
-    const modelName = this.getModelShortName(workerModel);
-
-    console.log(chalk.dim(`[Status] ${modelEmoji} ${modelName} | ${continueEmoji} ${shouldContinue ? 'Continue' : 'Stop'} | ${correctionEmoji} ${needsCorrection ? 'Needs correction' : 'OK'}`));
-  }
-
-  private static getModelShortName(model: string): string {
-    if (model.includes('opus')) return 'Opus';
-    if (model.includes('haiku')) return 'Haiku';
-    if (model.includes('sonnet')) return 'Sonnet';
-    return model;
+    console.log(chalk.dim(`[Status] ${continueEmoji} ${shouldContinue ? 'Continue' : 'Stop'} | ${correctionEmoji} ${needsCorrection ? 'Needs correction' : 'OK'}`));
   }
 }

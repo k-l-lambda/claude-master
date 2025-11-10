@@ -358,7 +358,6 @@ export class Orchestrator {
 
       Display.newline();
       Display.instructorStatus(
-        'N/A', // Model is now determined by worker tools, not by response
         response.shouldContinue,
         response.needsCorrection || false
       );
@@ -489,7 +488,8 @@ export class Orchestrator {
       displayMode = 'tell_worker (continue)';
     }
 
-    Display.header(InstanceType.WORKER, `Processing Instruction (Model: ${model}, Mode: ${displayMode})`);
+    // Use new workerHeader with model and mode emojis
+    Display.workerHeader(`Processing Instruction (Model: ${model})`, model, displayMode);
     Display.system('Instruction from Instructor:');
 
     if (toolName === 'call_worker' || toolName === 'call_worker_with_file') {
