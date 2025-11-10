@@ -73,10 +73,10 @@ export class WorkerManager {
     onTextChunk?: (chunk: string) => void,
     abortSignal?: AbortSignal
   ): Promise<string> {
-    console.log('[Worker] resetAndCall called');
-    console.log('[Worker] Instruction length:', instruction.length);
-    console.log('[Worker] Model:', model);
-    console.log('[Worker] System prompt provided:', !!systemPrompt, 'length:', systemPrompt?.length || 0);
+    // console.log('[Worker] resetAndCall called');
+    // console.log('[Worker] Instruction length:', instruction.length);
+    // console.log('[Worker] Model:', model);
+    // console.log('[Worker] System prompt provided:', !!systemPrompt, 'length:', systemPrompt?.length || 0);
 
     // Reset conversation history
     this.conversationHistory = [];
@@ -84,18 +84,18 @@ export class WorkerManager {
     // Update system prompt if provided
     if (systemPrompt) {
       this.systemPrompt = systemPrompt;
-      console.log('[Worker] System prompt updated');
+      // console.log('[Worker] System prompt updated');
     } else {
-      console.log('[Worker] Using default system prompt');
+      // console.log('[Worker] Using default system prompt');
     }
 
     // Add context messages if provided
     if (contextMessages && contextMessages.length > 0) {
       this.conversationHistory.push(...contextMessages);
-      console.log('[Worker] Added', contextMessages.length, 'context messages');
+      // console.log('[Worker] Added', contextMessages.length, 'context messages');
     }
 
-    console.log('[Worker] About to call processInstruction...');
+    // console.log('[Worker] About to call processInstruction...');
     // Process the instruction with fresh context
     return await this.processInstruction(instruction, model, onTextChunk, abortSignal);
   }
@@ -106,9 +106,9 @@ export class WorkerManager {
     onTextChunk?: (chunk: string) => void,
     abortSignal?: AbortSignal
   ): Promise<string> {
-    console.log('[Worker.processInstruction] Called');
-    console.log('[Worker.processInstruction] Instruction:', instruction.substring(0, 100));
-    console.log('[Worker.processInstruction] Model:', model);
+    // console.log('[Worker.processInstruction] Called');
+    // console.log('[Worker.processInstruction] Instruction:', instruction.substring(0, 100));
+    // console.log('[Worker.processInstruction] Model:', model);
 
     // Validate instruction is not empty
     if (!instruction || instruction.trim().length === 0) {
@@ -119,27 +119,27 @@ export class WorkerManager {
       role: 'user',
       content: instruction,
     });
-    console.log('[Worker.processInstruction] Added instruction to conversation history');
-    console.log('[Worker.processInstruction] History length:', this.conversationHistory.length);
+    // console.log('[Worker.processInstruction] Added instruction to conversation history');
+    // console.log('[Worker.processInstruction] History length:', this.conversationHistory.length);
 
     // Agentic loop: keep calling API until we get a non-tool response
     let maxIterations = 50; // Prevent infinite loops
     let iteration = 0;
     let finalText = '';
 
-    console.log('[Worker.processInstruction] Entering agentic loop...');
+    // console.log('[Worker.processInstruction] Entering agentic loop...');
 
     try {
       while (iteration < maxIterations) {
         iteration++;
-        console.log('[Worker.processInstruction] Iteration', iteration, 'of', maxIterations);
+        // console.log('[Worker.processInstruction] Iteration', iteration, 'of', maxIterations);
 
         // Filter tools based on current permissions
         const allowedToolNames = this.toolExecutor.getAllowedTools();
         const filteredTools = workerTools.filter(tool => allowedToolNames.includes(tool.name));
-        console.log('[Worker.processInstruction] Allowed tools count:', filteredTools.length);
+        // console.log('[Worker.processInstruction] Allowed tools count:', filteredTools.length);
 
-        console.log('[Worker.processInstruction] About to call client.streamMessage...');
+        // console.log('[Worker.processInstruction] About to call client.streamMessage...');
         let response;
         try {
           response = await this.client.streamMessage(
@@ -156,7 +156,7 @@ export class WorkerManager {
             abortSignal,
             'worker'
           );
-          console.log('[Worker.processInstruction] Received response from API, content blocks:', response.content.length);
+          // console.log('[Worker.processInstruction] Received response from API, content blocks:', response.content.length);
         } catch (error) {
           console.error('[Worker.processInstruction] ERROR during API call:', error);
           throw error;
