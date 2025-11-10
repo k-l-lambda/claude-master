@@ -64,7 +64,9 @@ tell_worker(
 ### Model Selection
 - **opus** 🧠 - Most capable, best for complex/novel tasks
 - **sonnet** 🚀 - Balanced performance, good for most tasks
-- **haiku** ⚡ - Fast and efficient, good for simple/routine tasks
+- **haiku** ⚡ - Fast and efficient, good for simple/routine tasks (recommended)
+
+The system fetches the latest model IDs from the Anthropic API on startup.
 
 ### Best Practices
 - Use **call_worker** when starting new features or major changes

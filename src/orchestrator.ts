@@ -6,6 +6,7 @@ import { SessionManager } from './session-manager.js';
 import { TokenCounter } from './token-counter.js';
 import { ConversationCompactor } from './compactor.js';
 import { ClaudeClient } from './client.js';
+import { ModelManager } from './model-manager.js';
 import * as readline from 'readline';
 
 export class Orchestrator {
@@ -24,12 +25,14 @@ export class Orchestrator {
   private compactor: ConversationCompactor | null = null;
   private isRestoredSession: boolean = false;
   private workerTimeoutMs: number = 60000; // Default: 60 seconds
+  private modelManager: ModelManager;
 
   constructor(config: Config, workDir: string, sessionId?: string) {
     this.config = config;
     this.workDir = workDir;
     this.remainingRounds = config.maxRounds || Infinity;
     this.sessionManager = new SessionManager();
+    this.modelManager = new ModelManager();
 
     // Generate or use provided session ID
     this.sessionId = sessionId || this.sessionManager.generateSessionId();
@@ -471,22 +474,27 @@ export class Orchestrator {
   }
 
   /**
-   * Map shorthand model names to full model IDs
+   * Map shorthand model names to full model IDs using ModelManager
    */
   private mapModelName(model: string): string {
-    // If already a full model ID, return as-is
-    if (model.startsWith('claude-')) {
-      return model;
+    return this.modelManager.resolve(model);
+  }
+
+  /**
+   * Initialize ModelManager with API
+   */
+  private async initializeModelManager(): Promise<void> {
+    if (this.modelManager.isInitialized()) {
+      return;
     }
 
-    // Map shorthand to full IDs
-    const modelMap: Record<string, string> = {
-      'opus': 'claude-opus-4-20250514',
-      'sonnet': 'claude-sonnet-4-20250514',
-      'haiku': 'claude-3-5-haiku-20241022',
-    };
-
-    return modelMap[model.toLowerCase()] || model;
+    try {
+      const client = new ClaudeClient(this.config);
+      await this.modelManager.initialize(client.getClient());
+    } catch (error) {
+      console.warn('[Orchestrator] Failed to initialize ModelManager:', error);
+      // ModelManager will use fallback mapping
+    }
   }
 
   /**
@@ -612,6 +620,9 @@ export class Orchestrator {
   }
 
   async run(initialInstruction?: string): Promise<void> {
+    // Initialize ModelManager before starting
+    await this.initializeModelManager();
+
     Display.info(`Starting dual-AI orchestration system`);
     Display.info(`Instructor Model: ${this.config.instructorModel}`);
     Display.info(`Worker Default Model: ${this.config.workerModel}`);

@@ -118,9 +118,11 @@ tell_worker(
 \`\`\`
 
 ## Model Selection
-- **opus**: Most capable, best for complex/novel tasks (claude-opus-4-20250514)
-- **sonnet**: Balanced performance, good for most tasks (claude-sonnet-4-20250514)
-- **haiku**: Fast and efficient, good for simple/routine tasks (claude-3-5-haiku-20241022)
+- **opus**: Most capable, best for complex/novel tasks
+- **sonnet**: Balanced performance, good for most tasks
+- **haiku**: Fast and efficient, good for simple/routine tasks (recommended)
+
+The system fetches the latest model IDs from the API on startup.
 
 ## Worker Context Strategy
 - **call_worker / call_worker_with_file**: Clears Worker's memory - use when starting new tasks
