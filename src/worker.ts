@@ -73,19 +73,29 @@ export class WorkerManager {
     onTextChunk?: (chunk: string) => void,
     abortSignal?: AbortSignal
   ): Promise<string> {
+    console.log('[Worker] resetAndCall called');
+    console.log('[Worker] Instruction length:', instruction.length);
+    console.log('[Worker] Model:', model);
+    console.log('[Worker] System prompt provided:', !!systemPrompt, 'length:', systemPrompt?.length || 0);
+
     // Reset conversation history
     this.conversationHistory = [];
 
     // Update system prompt if provided
     if (systemPrompt) {
       this.systemPrompt = systemPrompt;
+      console.log('[Worker] System prompt updated');
+    } else {
+      console.log('[Worker] Using default system prompt');
     }
 
     // Add context messages if provided
     if (contextMessages && contextMessages.length > 0) {
       this.conversationHistory.push(...contextMessages);
+      console.log('[Worker] Added', contextMessages.length, 'context messages');
     }
 
+    console.log('[Worker] About to call processInstruction...');
     // Process the instruction with fresh context
     return await this.processInstruction(instruction, model, onTextChunk, abortSignal);
   }
@@ -96,6 +106,10 @@ export class WorkerManager {
     onTextChunk?: (chunk: string) => void,
     abortSignal?: AbortSignal
   ): Promise<string> {
+    console.log('[Worker.processInstruction] Called');
+    console.log('[Worker.processInstruction] Instruction:', instruction.substring(0, 100));
+    console.log('[Worker.processInstruction] Model:', model);
+
     // Validate instruction is not empty
     if (!instruction || instruction.trim().length === 0) {
       throw new Error('Cannot process empty instruction');
@@ -105,34 +119,48 @@ export class WorkerManager {
       role: 'user',
       content: instruction,
     });
+    console.log('[Worker.processInstruction] Added instruction to conversation history');
+    console.log('[Worker.processInstruction] History length:', this.conversationHistory.length);
 
     // Agentic loop: keep calling API until we get a non-tool response
     let maxIterations = 50; // Prevent infinite loops
     let iteration = 0;
     let finalText = '';
 
+    console.log('[Worker.processInstruction] Entering agentic loop...');
+
     try {
       while (iteration < maxIterations) {
         iteration++;
+        console.log('[Worker.processInstruction] Iteration', iteration, 'of', maxIterations);
 
         // Filter tools based on current permissions
         const allowedToolNames = this.toolExecutor.getAllowedTools();
         const filteredTools = workerTools.filter(tool => allowedToolNames.includes(tool.name));
+        console.log('[Worker.processInstruction] Allowed tools count:', filteredTools.length);
 
-        const response = await this.client.streamMessage(
-          this.conversationHistory,
-          model,
-          this.systemPrompt,
-          filteredTools,
-          false, // No thinking for worker
-          (chunk, type) => {
-            if (type === 'text' && onTextChunk) {
-              onTextChunk(chunk);
-            }
-          },
-          abortSignal,
-          'worker'
-        );
+        console.log('[Worker.processInstruction] About to call client.streamMessage...');
+        let response;
+        try {
+          response = await this.client.streamMessage(
+            this.conversationHistory,
+            model,
+            this.systemPrompt,
+            filteredTools,
+            false, // No thinking for worker
+            (chunk, type) => {
+              if (type === 'text' && onTextChunk) {
+                onTextChunk(chunk);
+              }
+            },
+            abortSignal,
+            'worker'
+          );
+          console.log('[Worker.processInstruction] Received response from API, content blocks:', response.content.length);
+        } catch (error) {
+          console.error('[Worker.processInstruction] ERROR during API call:', error);
+          throw error;
+        }
 
       // Check if there are any tool uses
       const toolUses = response.content.filter(block => block.type === 'tool_use');

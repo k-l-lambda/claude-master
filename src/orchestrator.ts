@@ -471,6 +471,25 @@ export class Orchestrator {
   }
 
   /**
+   * Map shorthand model names to full model IDs
+   */
+  private mapModelName(model: string): string {
+    // If already a full model ID, return as-is
+    if (model.startsWith('claude-')) {
+      return model;
+    }
+
+    // Map shorthand to full IDs
+    const modelMap: Record<string, string> = {
+      'opus': 'claude-opus-4-20250514',
+      'sonnet': 'claude-sonnet-4-20250514',
+      'haiku': 'claude-3-5-haiku-20241022',
+    };
+
+    return modelMap[model.toLowerCase()] || model;
+  }
+
+  /**
    * Call Worker with structured parameters from worker tools
    * Handles three tool types:
    * - call_worker: Reset context with inline system prompt
@@ -478,8 +497,13 @@ export class Orchestrator {
    * - tell_worker: Continue existing conversation
    */
   private async callWorkerWithParams(params: import('./types.js').CallWorkerParams): Promise<string> {
-    const model = params.model || this.config.workerModel;
+    const rawModel = params.model || this.config.workerModel;
+    const model = this.mapModelName(rawModel); // Map shorthand to full ID
     const toolName = params.tool_name;
+
+    if (rawModel !== model) {
+      console.log(`[Orchestrator] Mapped model name: "${rawModel}" -> "${model}"`);
+    }
 
     let displayMode: string;
     if (toolName === 'call_worker' || toolName === 'call_worker_with_file') {
@@ -533,8 +557,14 @@ export class Orchestrator {
     try {
       let workerResponse: string;
 
+      console.log('[DEBUG] About to call Worker, toolName:', toolName);
+      console.log('[DEBUG] Model:', model);
+      console.log('[DEBUG] System prompt:', params.system_prompt?.substring(0, 100) + '...');
+      console.log('[DEBUG] Instruction/Message:', (params.instruction || params.message || '').substring(0, 100));
+
       if (toolName === 'call_worker' || toolName === 'call_worker_with_file') {
         // Reset Worker context and call with fresh instruction
+        console.log('[DEBUG] Calling worker.resetAndCall...');
         workerResponse = await this.worker.resetAndCall(
           params.instruction || '',
           model,
@@ -543,14 +573,17 @@ export class Orchestrator {
           onTextChunk,
           this.currentAbortController.signal
         );
+        console.log('[DEBUG] Worker.resetAndCall completed, response length:', workerResponse.length);
       } else {
         // tell_worker mode: continue existing conversation
+        console.log('[DEBUG] Calling worker.processInstruction...');
         workerResponse = await this.worker.processInstruction(
           params.message || '',
           model,
           onTextChunk,
           this.currentAbortController.signal
         );
+        console.log('[DEBUG] Worker.processInstruction completed, response length:', workerResponse.length);
       }
 
       clearInterval(timeoutCheckInterval);

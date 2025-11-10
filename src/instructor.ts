@@ -118,8 +118,8 @@ tell_worker(
 \`\`\`
 
 ## Model Selection
-- **opus**: Most capable, best for complex/novel tasks (claude-opus-4-1-20250805)
-- **sonnet**: Balanced performance, good for most tasks (claude-sonnet-4-5-20250929)
+- **opus**: Most capable, best for complex/novel tasks (claude-opus-4-20250514)
+- **sonnet**: Balanced performance, good for most tasks (claude-sonnet-4-20250514)
 - **haiku**: Fast and efficient, good for simple/routine tasks (claude-3-5-haiku-20241022)
 
 ## Worker Context Strategy
