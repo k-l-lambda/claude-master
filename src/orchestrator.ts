@@ -360,9 +360,15 @@ export class Orchestrator {
       }
 
       Display.newline();
+
+      // Calculate token count for Instructor context
+      const instructorMessages = this.instructor.getConversationHistory();
+      const tokenCount = TokenCounter.countConversationTokens(instructorMessages);
+
       Display.instructorStatus(
         response.shouldContinue,
-        response.needsCorrection || false
+        response.needsCorrection || false,
+        tokenCount
       );
 
       if (this.interrupted) {
@@ -760,6 +766,9 @@ export class Orchestrator {
             instructorResponse.shouldContinue = false;
             break;
           }
+
+          // Check for auto-compact before Instructor reviews Worker response
+          await this.checkAndAutoCompact();
 
           // Instructor reviews Worker response
           this.currentRound++;

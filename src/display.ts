@@ -117,13 +117,18 @@ export class Display {
   /**
    * Print Instructor response status for debugging
    */
-  static instructorStatus(shouldContinue: boolean, needsCorrection: boolean): void {
+  static instructorStatus(shouldContinue: boolean, needsCorrection: boolean, tokenCount?: number): void {
     // Continue emoji
     const continueEmoji = shouldContinue ? '▶️ ' : '⏹️ ';
 
     // Correction emoji
     const correctionEmoji = needsCorrection ? '⚠️ ' : '✅';
 
-    console.log(chalk.dim(`[Status] ${continueEmoji} ${shouldContinue ? 'Continue' : 'Stop'} | ${correctionEmoji} ${needsCorrection ? 'Needs correction' : 'OK'}`));
+    // Token info
+    const tokenInfo = tokenCount !== undefined
+      ? ` | 📊 ${tokenCount.toLocaleString()} tokens`
+      : '';
+
+    console.log(chalk.dim(`[Status] ${continueEmoji} ${shouldContinue ? 'Continue' : 'Stop'} | ${correctionEmoji} ${needsCorrection ? 'Needs correction' : 'OK'}${tokenInfo}`));
   }
 }
