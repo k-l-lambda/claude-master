@@ -654,13 +654,25 @@ export class Orchestrator {
     // Initialize ModelManager before starting
     await this.initializeModelManager();
 
-    // Detect providers from model names
-    const instructorProvider = this.modelManager.detectProvider(this.config.instructorModel);
-    const workerProvider = this.modelManager.detectProvider(this.config.workerModel);
+    // Resolve model names to full IDs BEFORE using them
+    const resolvedInstructorModel = this.modelManager.resolve(this.config.instructorModel);
+    const resolvedWorkerModel = this.modelManager.resolve(this.config.workerModel);
+
+    // Update config with resolved model names
+    this.config.instructorModel = resolvedInstructorModel;
+    this.config.workerModel = resolvedWorkerModel;
+
+    console.log(`[Orchestrator] Resolved models:`);
+    console.log(`  Instructor: ${this.config.instructorModel}`);
+    console.log(`  Worker: ${this.config.workerModel}`);
+
+    // Detect providers from resolved model names
+    const instructorProvider = this.modelManager.detectProvider(resolvedInstructorModel);
+    const workerProvider = this.modelManager.detectProvider(resolvedWorkerModel);
 
     Display.info(`Starting dual-AI orchestration system`);
-    Display.info(`Instructor: ${this.config.instructorModel} (${instructorProvider})`);
-    Display.info(`Worker: ${this.config.workerModel} (${workerProvider})`);
+    Display.info(`Instructor: ${resolvedInstructorModel} (${instructorProvider})`);
+    Display.info(`Worker: ${resolvedWorkerModel} (${workerProvider})`);
     if (this.config.maxRounds) {
       Display.info(`Max Rounds: ${this.config.maxRounds}`);
     }

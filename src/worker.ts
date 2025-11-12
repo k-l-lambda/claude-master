@@ -134,9 +134,9 @@ export class WorkerManager {
     onTextChunk?: (chunk: string) => void,
     abortSignal?: AbortSignal
   ): Promise<string> {
-    // console.log('[Worker.processInstruction] Called');
-    // console.log('[Worker.processInstruction] Instruction:', instruction.substring(0, 100));
-    // console.log('[Worker.processInstruction] Model:', model);
+    // Resolve model name to full ID
+    const resolvedModel = this.modelManager.resolve(model);
+    console.log(`[Worker] Model resolution: "${model}" → "${resolvedModel}"`);
 
     // Validate instruction is not empty
     if (!instruction || instruction.trim().length === 0) {
@@ -171,15 +171,15 @@ export class WorkerManager {
         let response: any;
         try {
           // Get appropriate client for the specified model (may switch providers dynamically)
-          const client = this.getClientForModel(model);
+          const client = this.getClientForModel(resolvedModel);
 
-          // Use AIClient interface
+          // Use AIClient interface with resolved model ID
           const aiResponse = await client.streamMessage({
             messages: this.conversationHistory.map(m => ({
               role: m.role,
               content: m.content,
             })),
-            model,
+            model: resolvedModel,  // Use resolved model ID
             systemPrompt: this.systemPrompt,
             tools: filteredTools,
             options: {

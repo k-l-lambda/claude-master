@@ -38,18 +38,35 @@ export class ModelManager {
         const id = model.id;
         console.log('[ModelManager] Found model:', id, '-', model.display_name);
 
-        // Match models by ID pattern (most recent first in API response)
-        if (!latestOpus && id.includes('opus')) {
-          latestOpus = id;
-          this.modelMap.set('opus', id);
+        // Match models by specific ID patterns (prioritize latest versions)
+        // For Haiku: match haiku-4-5 > 3-5-haiku > 3-haiku
+        if (!latestHaiku && (
+          id.startsWith('claude-haiku-4-5') ||
+          id.startsWith('claude-3-5-haiku') ||
+          id.startsWith('claude-3-haiku')
+        )) {
+          latestHaiku = id;
+          this.modelMap.set('haiku', id);
         }
-        if (!latestSonnet && id.includes('sonnet')) {
+
+        // For Sonnet: match sonnet-4-5 > sonnet-4 > 3-7-sonnet > 3-5-sonnet
+        if (!latestSonnet && (
+          id.startsWith('claude-sonnet-4-5') ||
+          id.startsWith('claude-sonnet-4') ||
+          id.startsWith('claude-3-7-sonnet') ||
+          id.startsWith('claude-3-5-sonnet')
+        )) {
           latestSonnet = id;
           this.modelMap.set('sonnet', id);
         }
-        if (!latestHaiku && id.includes('haiku')) {
-          latestHaiku = id;
-          this.modelMap.set('haiku', id);
+
+        // For Opus: match opus-4-1 > opus-4
+        if (!latestOpus && (
+          id.startsWith('claude-opus-4-1') ||
+          id.startsWith('claude-opus-4')
+        )) {
+          latestOpus = id;
+          this.modelMap.set('opus', id);
         }
 
         // Stop if we found all three
@@ -62,6 +79,16 @@ export class ModelManager {
       console.log('  opus   ->', this.modelMap.get('opus') || 'NOT FOUND');
       console.log('  sonnet ->', this.modelMap.get('sonnet') || 'NOT FOUND');
       console.log('  haiku  ->', this.modelMap.get('haiku') || 'NOT FOUND');
+
+      // Add Qwen models from fallback (since they're not in Anthropic API)
+      this.modelMap.set('qwen', this.fallbackMap.get('qwen')!);
+      this.modelMap.set('qwen-max', this.fallbackMap.get('qwen-max')!);
+      this.modelMap.set('qwen-plus', this.fallbackMap.get('qwen-plus')!);
+      this.modelMap.set('qwen-turbo', this.fallbackMap.get('qwen-turbo')!);
+      this.modelMap.set('coder-model', this.fallbackMap.get('coder-model')!);
+
+      console.log('  qwen   ->', this.modelMap.get('qwen'));
+      console.log('  qwen-max ->', this.modelMap.get('qwen-max'));
 
       this.initialized = true;
     } catch (error) {
@@ -83,14 +110,16 @@ export class ModelManager {
       return modelName;
     }
 
-    // If it's a Qwen model pattern, return as-is
-    if (this.isQwenModel(modelName)) {
+    // If it's a full Qwen model ID (contains slash), return as-is
+    // Note: Do NOT return early for simple "qwen" - it needs mapping!
+    if (modelName.includes('/') || modelName.startsWith('Qwen/')) {
       return modelName;
     }
 
-    // Try to resolve from fetched mapping
+    // Try to resolve from fetched mapping (includes both Claude and Qwen)
     const resolved = this.modelMap.get(modelName.toLowerCase());
     if (resolved) {
+      console.log(`[ModelManager] Resolved "${modelName}" → "${resolved}" from modelMap`);
       return resolved;
     }
 
