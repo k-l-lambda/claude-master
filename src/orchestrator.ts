@@ -314,8 +314,11 @@ export class Orchestrator {
 
   private async callInstructor(
     message: string,
-    context: 'user-input' | 'worker-response' | 'correction'
+    context: 'user-input' | 'worker-response' | 'correction',
+    compactionDepth: number = 0
   ): Promise<any | null> {
+    const MAX_COMPACTION_ATTEMPTS = 3;
+
     this.currentAbortController = new AbortController();
 
     let thinkingBuffer = '';
@@ -380,10 +383,19 @@ export class Orchestrator {
     } catch (error: any) {
       // Handle Instructor context too long - trigger automatic compaction
       if (error.message === 'INSTRUCTOR_CONTEXT_TOO_LONG') {
+        // Check if we've reached maximum compaction attempts
+        if (compactionDepth >= MAX_COMPACTION_ATTEMPTS) {
+          Display.newline();
+          Display.error('❌ Maximum compaction attempts reached');
+          Display.system(`   Attempted ${MAX_COMPACTION_ATTEMPTS} compactions but context is still too long`);
+          Display.system('   This may indicate the current message is too large or compaction is ineffective');
+          throw new Error(`Unable to reduce Instructor context size after ${MAX_COMPACTION_ATTEMPTS} compaction attempts`);
+        }
+
         Display.newline();
         Display.warning('⚠️  Instructor context is too long');
         Display.system(`   Current size: ${(error.tokenCount || 0).toLocaleString()} tokens`);
-        Display.system('   Performing emergency compaction...');
+        Display.system(`   Performing emergency compaction... (attempt ${compactionDepth + 1}/${MAX_COMPACTION_ATTEMPTS})`);
         Display.newline();
 
         if (!this.compactor) {
@@ -401,9 +413,9 @@ export class Orchestrator {
           Display.system(`   Reduced: ${result.preTokens.toLocaleString()} → ${result.postTokens.toLocaleString()} tokens`);
           Display.newline();
 
-          // Retry the same call after compaction
+          // Retry the same call after compaction with incremented depth
           Display.system('Retrying Instructor call after compaction...');
-          return await this.callInstructor(message, context);
+          return await this.callInstructor(message, context, compactionDepth + 1);
         } catch (compactError) {
           Display.error('Failed to compact Instructor context');
           throw compactError;
@@ -533,7 +545,7 @@ export class Orchestrator {
     if (toolName === 'call_worker' || toolName === 'call_worker_with_file') {
       let instruction = params.instruction || '';
       if (toolName === 'call_worker_with_file')
-        instruction = Display.truncate(instruction)
+        instruction = Display.truncate(instruction);
       Display.system(instruction);
       Display.system('Mode: Resetting Worker context with new system prompt');
     } else {
