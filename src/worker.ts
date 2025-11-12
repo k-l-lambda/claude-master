@@ -75,8 +75,6 @@ export class WorkerManager {
     const client = AIClientFactory.createClient(this.config, modelName, this.modelManager);
     this.clientCache.set(provider, client);
 
-    console.log(`[WorkerManager] Created and cached ${provider} client for model: ${modelName}`);
-
     return client;
   }
 
@@ -136,7 +134,6 @@ export class WorkerManager {
   ): Promise<string> {
     // Resolve model name to full ID
     const resolvedModel = this.modelManager.resolve(model);
-    console.log(`[Worker] Model resolution: "${model}" → "${resolvedModel}"`);
 
     // Validate instruction is not empty
     if (!instruction || instruction.trim().length === 0) {

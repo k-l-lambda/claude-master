@@ -46,29 +46,19 @@ export class QwenClient implements AIClient {
     // Try to load OAuth credentials first (synchronous check)
     let oauthCreds: any = null;
     try {
-      // Load OAuth credentials synchronously
       const credFile = path.join(os.homedir(), '.qwen', 'oauth_creds.json');
-
-      console.log('[QwenClient] Checking for OAuth credentials at:', credFile);
-
       if (fs.existsSync(credFile)) {
         const credData = fs.readFileSync(credFile, 'utf-8');
         oauthCreds = JSON.parse(credData);
 
         // Check if token is expired
         if (oauthCreds.expiry_date && Date.now() >= oauthCreds.expiry_date) {
-          console.log('[QwenClient] OAuth credentials expired');
+          console.warn('[QwenClient] OAuth token expired');
           oauthCreds = null;
-        } else {
-          console.log('[QwenClient] Successfully loaded OAuth credentials');
-          console.log('[QwenClient] Token expires:', new Date(oauthCreds.expiry_date).toLocaleString());
         }
-      } else {
-        console.log('[QwenClient] OAuth credentials file does not exist');
       }
     } catch (error: any) {
-      // OAuth not available, will use API key
-      console.log('[QwenClient] Failed to load OAuth credentials:', error.message);
+      console.warn('[QwenClient] Failed to load OAuth credentials:', error.message);
     }
 
     // Initialize client with API key or OAuth credentials
@@ -86,19 +76,6 @@ export class QwenClient implements AIClient {
       || process.env.OPENAI_BASE_URL
       || (oauthCreds?.resource_url ? formatOAuthEndpoint(oauthCreds.resource_url) : null)
       || 'https://dashscope.aliyuncs.com/compatible-mode/v1';
-
-    const usingOAuth = !config.qwenApiKey && !config.apiKey && !process.env.QWEN_API_KEY && !process.env.OPENAI_API_KEY && !!oauthCreds;
-
-    console.log('[QwenClient] Configuration:');
-    if (usingOAuth) {
-      console.log('  Auth Method: OAuth (Qwen Chat)');
-      console.log('  Access Token:', apiKey ? `${apiKey.substring(0, 20)}...` : 'NOT SET');
-      console.log('  Expires:', oauthCreds.expiry_date ? new Date(oauthCreds.expiry_date).toLocaleString() : 'N/A');
-    } else {
-      console.log('  Auth Method: API Key');
-      console.log('  API Key:', apiKey ? `${apiKey.substring(0, 10)}...` : 'NOT SET');
-    }
-    console.log('  Base URL:', baseURL);
 
     if (!apiKey) {
       console.error('[QwenClient] ERROR: No API key or OAuth credentials found!');

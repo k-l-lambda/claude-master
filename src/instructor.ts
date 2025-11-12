@@ -270,7 +270,6 @@ Worker's conversation history is NOT persisted between sessions. When resuming:
           );
         } else {
           // Use new AIClient interface
-          console.log(`[Instructor] About to call API with model: ${this.config.instructorModel}`);
           const aiResponse = await this.client.streamMessage({
             messages: this.conversationHistory.map(m => ({
               role: m.role,
@@ -287,7 +286,6 @@ Worker's conversation history is NOT persisted between sessions. When resuming:
             abortSignal,
             context: 'instructor',
           });
-          console.log(`[Instructor] API response received, model used: ${aiResponse.model}`);
 
           // Convert AIMessage back to Anthropic format for compatibility
           response = {

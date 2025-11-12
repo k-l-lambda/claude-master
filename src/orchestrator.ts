@@ -536,10 +536,6 @@ export class Orchestrator {
     const model = this.mapModelName(rawModel); // Map shorthand to full ID
     const toolName = params.tool_name;
 
-    if (rawModel !== model) {
-      console.log(`[Orchestrator] Mapped model name: "${rawModel}" -> "${model}"`);
-    }
-
     let displayMode: string;
     if (toolName === 'call_worker' || toolName === 'call_worker_with_file') {
       displayMode = 'call_worker (reset context)';
