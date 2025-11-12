@@ -3,9 +3,12 @@ import { Config, Message, InstructorResponse } from './types.js';
 import { instructorTools } from './tools.js';
 import { ToolExecutor } from './tool-executor.js';
 import { WorkerManager } from './worker.js';
+import { AIClient } from './ai-client/types.js';
+import Anthropic from '@anthropic-ai/sdk';
 
 export class InstructorManager {
-  private client: ClaudeClient;
+  private client: AIClient;
+  private legacyClient: ClaudeClient | null = null;  // For getClient() backward compatibility
   private config: Config;
   private conversationHistory: Message[] = [];
   private systemPrompt: string;
@@ -72,8 +75,15 @@ export class InstructorManager {
     return { platformName };
   }
 
-  constructor(config: Config, userInstruction: string, workDir: string) {
-    this.client = new ClaudeClient(config);
+  constructor(config: Config, userInstruction: string, workDir: string, client?: AIClient) {
+    // Use provided client or create a legacy ClaudeClient for backward compatibility
+    if (client) {
+      this.client = client;
+    } else {
+      this.legacyClient = new ClaudeClient(config);
+      this.client = this.legacyClient as any;  // Cast for backward compatibility
+    }
+
     this.config = config;
     // Pass allowed tool names to ToolExecutor
     const allowedToolNames = instructorTools.map(t => t.name);
@@ -237,22 +247,68 @@ Worker's conversation history is NOT persisted between sessions. When resuming:
       while (iteration < maxIterations) {
         iteration++;
 
-        const response = await this.client.streamMessage(
-          this.conversationHistory,
-          this.config.instructorModel,
-          this.systemPrompt,
-          instructorTools,
-          this.config.useThinking ?? false,
-          (chunk, type) => {
-            if (type === 'thinking' && onThinkingChunk) {
-              onThinkingChunk(chunk);
-            } else if (type === 'text' && onTextChunk) {
-              onTextChunk(chunk);
-            }
-          },
-          abortSignal,
-          'instructor'
-        );
+        // Call client with appropriate interface
+        let response: any;
+
+        if (this.legacyClient) {
+          // Use legacy ClaudeClient interface
+          response = await this.legacyClient.streamMessage(
+            this.conversationHistory,
+            this.config.instructorModel,
+            this.systemPrompt,
+            instructorTools,
+            this.config.useThinking ?? false,
+            (chunk, type) => {
+              if (type === 'thinking' && onThinkingChunk) {
+                onThinkingChunk(chunk);
+              } else if (type === 'text' && onTextChunk) {
+                onTextChunk(chunk);
+              }
+            },
+            abortSignal,
+            'instructor'
+          );
+        } else {
+          // Use new AIClient interface
+          const aiResponse = await this.client.streamMessage({
+            messages: this.conversationHistory.map(m => ({
+              role: m.role,
+              content: m.content,
+            })),
+            model: this.config.instructorModel,
+            systemPrompt: this.systemPrompt,
+            tools: instructorTools,
+            options: {
+              useThinking: this.config.useThinking ?? false,
+            },
+            onThinkingChunk,
+            onTextChunk,
+            abortSignal,
+            context: 'instructor',
+          });
+
+          // Convert AIMessage back to Anthropic format for compatibility
+          response = {
+            content: aiResponse.content.map(block => {
+              if (block.type === 'text') return { type: 'text', text: block.text || '' };
+              if (block.type === 'thinking') return { type: 'thinking', thinking: block.thinking || '' };
+              if (block.type === 'tool_use' && block.toolUse) {
+                return {
+                  type: 'tool_use',
+                  id: block.toolUse.id,
+                  name: block.toolUse.name,
+                  input: block.toolUse.input,
+                };
+              }
+              return block;
+            }),
+            stop_reason: aiResponse.stopReason,
+            usage: {
+              input_tokens: aiResponse.usage.inputTokens,
+              output_tokens: aiResponse.usage.outputTokens,
+            },
+          };
+        }
 
       // Extract thinking
       for (const block of response.content) {

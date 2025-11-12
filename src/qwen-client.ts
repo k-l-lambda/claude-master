@@ -24,9 +24,17 @@ export class QwenClient implements AIClient {
     this.config = config;
 
     // Initialize client with API key or OAuth credentials
-    const apiKey = config.qwenApiKey || process.env.QWEN_API_KEY;
-    const baseURL = config.qwenBaseUrl || process.env.QWEN_BASE_URL ||
-      'https://dashscope.aliyuncs.com/compatible-mode/v1';
+    // Priority: qwen-specific > general API key > environment variables
+    const apiKey = config.qwenApiKey
+      || config.apiKey  // Use general API key if qwen-specific not set
+      || process.env.QWEN_API_KEY
+      || process.env.OPENAI_API_KEY;
+
+    const baseURL = config.qwenBaseUrl
+      || config.baseURL  // Use general base URL if qwen-specific not set
+      || process.env.QWEN_BASE_URL
+      || process.env.OPENAI_BASE_URL
+      || 'https://dashscope.aliyuncs.com/compatible-mode/v1';
 
     this.client = new OpenAI({
       apiKey: apiKey,

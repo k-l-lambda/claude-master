@@ -26,19 +26,23 @@ const program = new Command();
 
 program
   .name('claude-master')
-  .description('CLI tool to orchestrate Instructor and Worker Claude instances')
+  .description('CLI tool to orchestrate Instructor and Worker AI instances (supports Claude and Qwen)')
   .version(version)
   .argument('[instruction]', 'Optional initial instruction for Instructor (can be provided later interactively)')
   .option('-d, --work-dir <path>', 'Working directory for the project', process.cwd())
   .option('-r, --max-rounds <number>', 'Maximum number of conversation rounds', parseInt)
-  .option('-i, --instructor-model <model>', 'Model for Instructor', 'claude-sonnet-4-5-20250929')
-  .option('-w, --worker-model <model>', 'Default model for Worker', 'claude-sonnet-4-5-20250929')
-  .option('-k, --api-key <key>', 'Anthropic API key (or use ANTHROPIC_AUTH_TOKEN env var or .env.local)')
-  .option('-u, --base-url <url>', 'API base URL (or use ANTHROPIC_BASE_URL env var or .env.local)')
+  .option('-i, --instructor-model <model>', 'Model for Instructor (e.g., sonnet, qwen, qwen-max)', 'claude-sonnet-4-5-20250929')
+  .option('-w, --worker-model <model>', 'Model for Worker (e.g., sonnet, qwen, qwen-max)', 'claude-sonnet-4-5-20250929')
+  .option('-k, --api-key <key>', 'API key (works for both Claude and Qwen, or use ANTHROPIC_API_KEY/QWEN_API_KEY env vars)')
+  .option('-u, --base-url <url>', 'API base URL (works for both providers, or use ANTHROPIC_BASE_URL/QWEN_BASE_URL env vars)')
   .option('--no-thinking', 'Disable thinking feature for Instructor (use this if your API/proxy does not support thinking)')
   .option('--debug', 'Enable debug mode with mock API responses (for testing orchestrator logic)')
   .option('-c, --continue', 'Continue the most recent session in current working directory')
   .option('--resume [sessionId]', 'Resume a previous session by session ID (or latest if not specified)')
+  // Qwen-specific overrides (optional)
+  .option('--qwen-api-key <key>', 'Qwen-specific API key (overrides --api-key for Qwen models)')
+  .option('--qwen-base-url <url>', 'Qwen-specific base URL (overrides --base-url for Qwen models)')
+  .option('--qwen-model <model>', 'Qwen model name (used when model shorthand is "qwen")')
   .action(async (instruction, options) => {
     try {
       // Change to work directory if specified
@@ -79,6 +83,11 @@ program
         maxRounds: options.maxRounds,
         useThinking: options.thinking !== false, // Default to true, but can be disabled with --no-thinking
         debugMode: options.debug || false, // Enable debug mode if --debug flag is present
+
+        // Qwen-specific configuration (optional overrides)
+        qwenApiKey: options.qwenApiKey || process.env.QWEN_API_KEY || process.env.OPENAI_API_KEY,
+        qwenBaseUrl: options.qwenBaseUrl || process.env.QWEN_BASE_URL || process.env.OPENAI_BASE_URL,
+        qwenModel: options.qwenModel || process.env.QWEN_MODEL || process.env.OPENAI_MODEL,
       };
 
       // Show debug mode warning

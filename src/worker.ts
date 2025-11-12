@@ -2,9 +2,14 @@ import { ClaudeClient } from './client.js';
 import { Config, Message } from './types.js';
 import { workerTools } from './tools.js';
 import { ToolExecutor } from './tool-executor.js';
+import { AIClient } from './ai-client/types.js';
+import { ModelManager } from './model-manager.js';
+import { AIClientFactory } from './ai-client-factory.js';
 
 export class WorkerManager {
-  private client: ClaudeClient;
+  private config: Config;
+  private modelManager: ModelManager;
+  private clientCache: Map<'claude' | 'qwen', AIClient> = new Map();
   private conversationHistory: Message[] = [];
   private systemPrompt: string;
   private toolExecutor: ToolExecutor;
@@ -41,8 +46,10 @@ export class WorkerManager {
     return cleaned;
   }
 
-  constructor(config: Config, workDir: string) {
-    this.client = new ClaudeClient(config);
+  constructor(config: Config, workDir: string, modelManager: ModelManager) {
+    this.config = config;
+    this.modelManager = modelManager;
+
     // Pass allowed tool names to ToolExecutor
     const allowedToolNames = workerTools.map(t => t.name);
     // Git commands are permanently forbidden for Worker
@@ -50,6 +57,27 @@ export class WorkerManager {
     this.toolExecutor = new ToolExecutor(workDir, allowedToolNames, permanentlyForbiddenTools);
     // Default system prompt - can be overridden via setSystemPrompt
     this.systemPrompt = 'You are a helpful AI assistant that follows instructions to implement tasks. You have access to tools for file operations and command execution.';
+  }
+
+  /**
+   * Get or create AIClient for the specified model
+   * Caches clients by provider to avoid recreating them
+   */
+  private getClientForModel(modelName: string): AIClient {
+    const provider = this.modelManager.detectProvider(modelName);
+
+    // Check cache first
+    if (this.clientCache.has(provider)) {
+      return this.clientCache.get(provider)!;
+    }
+
+    // Create new client and cache it
+    const client = AIClientFactory.createClient(this.config, modelName, this.modelManager);
+    this.clientCache.set(provider, client);
+
+    console.log(`[WorkerManager] Created and cached ${provider} client for model: ${modelName}`);
+
+    return client;
   }
 
   /**
@@ -140,22 +168,48 @@ export class WorkerManager {
         // console.log('[Worker.processInstruction] Allowed tools count:', filteredTools.length);
 
         // console.log('[Worker.processInstruction] About to call client.streamMessage...');
-        let response;
+        let response: any;
         try {
-          response = await this.client.streamMessage(
-            this.conversationHistory,
+          // Get appropriate client for the specified model (may switch providers dynamically)
+          const client = this.getClientForModel(model);
+
+          // Use AIClient interface
+          const aiResponse = await client.streamMessage({
+            messages: this.conversationHistory.map(m => ({
+              role: m.role,
+              content: m.content,
+            })),
             model,
-            this.systemPrompt,
-            filteredTools,
-            false, // No thinking for worker
-            (chunk, type) => {
-              if (type === 'text' && onTextChunk) {
-                onTextChunk(chunk);
-              }
+            systemPrompt: this.systemPrompt,
+            tools: filteredTools,
+            options: {
+              useThinking: false,
             },
+            onTextChunk,
             abortSignal,
-            'worker'
-          );
+            context: 'worker',
+          });
+
+          // Convert AIMessage back to Anthropic format for compatibility
+          response = {
+            content: aiResponse.content.map(block => {
+              if (block.type === 'text') return { type: 'text', text: block.text || '' };
+              if (block.type === 'tool_use' && block.toolUse) {
+                return {
+                  type: 'tool_use',
+                  id: block.toolUse.id,
+                  name: block.toolUse.name,
+                  input: block.toolUse.input,
+                };
+              }
+              return block;
+            }),
+            stop_reason: aiResponse.stopReason,
+            usage: {
+              input_tokens: aiResponse.usage.inputTokens,
+              output_tokens: aiResponse.usage.outputTokens,
+            },
+          };
           // console.log('[Worker.processInstruction] Received response from API, content blocks:', response.content.length);
         } catch (error) {
           console.error('[Worker.processInstruction] ERROR during API call:', error);

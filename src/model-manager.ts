@@ -7,9 +7,17 @@ import Anthropic from '@anthropic-ai/sdk';
 export class ModelManager {
   private modelMap: Map<string, string> = new Map();
   private fallbackMap: Map<string, string> = new Map([
+    // Claude models
     ['opus', 'claude-opus-4-1-20250805'],
     ['sonnet', 'claude-sonnet-4-5-20250929'],
     ['haiku', 'claude-haiku-4-5-20251001'],
+
+    // Qwen models
+    ['qwen', 'Qwen/Qwen3-Coder-480B-A35B-Instruct'],
+    ['qwen-max', 'qwen-max'],
+    ['qwen-plus', 'qwen-plus'],
+    ['qwen-turbo', 'qwen-turbo'],
+    ['coder-model', 'coder-model'],  // For OAuth
   ]);
   private initialized: boolean = false;
 
@@ -70,8 +78,13 @@ export class ModelManager {
    * Resolve a model name (short or full ID) to full model ID
    */
   resolve(modelName: string): string {
-    // If it's already a full model ID, return as-is
+    // If it's already a full Claude model ID, return as-is
     if (modelName.startsWith('claude-')) {
+      return modelName;
+    }
+
+    // If it's a Qwen model pattern, return as-is
+    if (this.isQwenModel(modelName)) {
       return modelName;
     }
 
@@ -91,6 +104,40 @@ export class ModelManager {
     // Return as-is if not found
     console.warn(`[ModelManager] Unknown model name "${modelName}", using as-is`);
     return modelName;
+  }
+
+  /**
+   * Detect which provider a model belongs to based on its name
+   */
+  detectProvider(modelName: string): 'claude' | 'qwen' {
+    const resolved = this.resolve(modelName);
+
+    // Check if it's a Qwen model
+    if (this.isQwenModel(resolved)) {
+      return 'qwen';
+    }
+
+    // Check if it's a Claude model
+    if (resolved.startsWith('claude-')) {
+      return 'claude';
+    }
+
+    // Default to Claude for unknown models
+    return 'claude';
+  }
+
+  /**
+   * Check if a model name is a Qwen model
+   */
+  private isQwenModel(modelName: string): boolean {
+    const lowerName = modelName.toLowerCase();
+    return (
+      lowerName.includes('qwen') ||
+      lowerName === 'coder-model' ||
+      lowerName.startsWith('qwen-') ||
+      lowerName.startsWith('qwen/') ||
+      lowerName.includes('/qwen')
+    );
   }
 
   /**

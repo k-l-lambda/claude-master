@@ -22,9 +22,17 @@ export class Display {
    * Get emoji for model type
    */
   private static getModelEmoji(model: string): string {
+    // Claude models
     if (model.includes('opus')) return '🧠'; // Opus - powerful brain
     if (model.includes('haiku')) return '⚡'; // Haiku - fast lightning
     if (model.includes('sonnet')) return '🚀'; // Sonnet - balanced rocket
+
+    // Qwen models
+    const lowerModel = model.toLowerCase();
+    if (lowerModel.includes('qwen') || lowerModel.includes('coder-model')) {
+      return '✡️'; // Qwen
+    }
+
     return '🤖'; // Default
   }
 

@@ -7,6 +7,7 @@ import { TokenCounter } from './token-counter.js';
 import { ConversationCompactor } from './compactor.js';
 import { ClaudeClient } from './client.js';
 import { ModelManager } from './model-manager.js';
+import { AIClientFactory } from './ai-client-factory.js';
 import * as readline from 'readline';
 
 export class Orchestrator {
@@ -37,8 +38,16 @@ export class Orchestrator {
     // Generate or use provided session ID
     this.sessionId = sessionId || this.sessionManager.generateSessionId();
 
-    this.instructor = new InstructorManager(config, '', workDir);
-    this.worker = new WorkerManager(config, workDir);
+    // Create AI clients based on model names (auto-detect provider)
+    // Instructor uses instructorModel, Worker uses workerModel initially but can switch dynamically
+    const instructorClient = AIClientFactory.createClient(
+      config,
+      config.instructorModel,
+      this.modelManager
+    );
+
+    this.instructor = new InstructorManager(config, '', workDir, instructorClient);
+    this.worker = new WorkerManager(config, workDir, this.modelManager);
     // Connect Instructor's tool executor to Worker's tool executor and Worker itself
     this.instructor.setWorkerToolExecutor(this.worker.getToolExecutor(), this.worker);
     // Connect Instructor's ability to set Worker timeout
@@ -645,9 +654,13 @@ export class Orchestrator {
     // Initialize ModelManager before starting
     await this.initializeModelManager();
 
+    // Detect providers from model names
+    const instructorProvider = this.modelManager.detectProvider(this.config.instructorModel);
+    const workerProvider = this.modelManager.detectProvider(this.config.workerModel);
+
     Display.info(`Starting dual-AI orchestration system`);
-    Display.info(`Instructor Model: ${this.config.instructorModel}`);
-    Display.info(`Worker Default Model: ${this.config.workerModel}`);
+    Display.info(`Instructor: ${this.config.instructorModel} (${instructorProvider})`);
+    Display.info(`Worker: ${this.config.workerModel} (${workerProvider})`);
     if (this.config.maxRounds) {
       Display.info(`Max Rounds: ${this.config.maxRounds}`);
     }
