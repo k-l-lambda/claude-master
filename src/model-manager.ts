@@ -13,10 +13,14 @@ export class ModelManager {
     ['haiku', 'claude-haiku-4-5-20251001'],
 
     // Qwen models
-    ['qwen', 'Qwen/Qwen3-Coder-480B-A35B-Instruct'],
-    ['qwen-max', 'qwen-max'],
-    ['qwen-plus', 'qwen-plus'],
-    ['qwen-turbo', 'qwen-turbo'],
+    // Note: Model names depend on the endpoint:
+    // - OAuth (portal.qwen.ai): use 'coder-model'
+    // - ModelScope (api-inference.modelscope.cn): use 'Qwen/Qwen2.5-Coder-32B-Instruct' format
+    // - DashScope (dashscope.aliyuncs.com): use 'qwen-max', 'qwen-plus', 'qwen-turbo'
+    ['qwen', 'coder-model'],  // For OAuth (default, recommended)
+    ['qwen-max', 'qwen-max'],  // DashScope format
+    ['qwen-plus', 'qwen-plus'],  // DashScope format
+    ['qwen-turbo', 'qwen-turbo'],  // DashScope format
     ['coder-model', 'coder-model'],  // For OAuth
   ]);
   private initialized: boolean = false;
