@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { resolve } from 'path';
 import { glob } from 'glob';
 import { execSync } from 'child_process';
+import { EOL } from 'os';
 
 export interface ToolUse {
   type: 'tool_use';
@@ -72,6 +73,42 @@ export class ToolExecutor {
    */
   getPermanentlyForbiddenTools(): string[] {
     return Array.from(this.permanentlyForbiddenTools);
+  }
+
+  /**
+   * Detect the line ending style used in content
+   * @returns '\r\n' for Windows, '\n' for Unix, or platform default if no line breaks found
+   */
+  private detectLineEnding(content: string): string {
+    // Check for Windows line endings first
+    if (content.includes('\r\n')) {
+      return '\r\n';
+    }
+    // Check for Unix line endings
+    if (content.includes('\n')) {
+      return '\n';
+    }
+    // No line endings found, use platform default
+    return EOL;
+  }
+
+  /**
+   * Normalize line endings in content to specified style
+   * @param content - The content to normalize
+   * @param targetEOL - Target line ending ('\r\n' or '\n')
+   * @returns Content with normalized line endings
+   */
+  private normalizeLineEndings(content: string, targetEOL: string): string {
+    // First normalize to \n, then convert to target
+    return content.replace(/\r\n/g, '\n').replace(/\n/g, targetEOL);
+  }
+
+  /**
+   * Normalize string for matching, handling different line ending styles
+   * This helps match strings regardless of line ending differences
+   */
+  private normalizeForMatching(content: string): string {
+    return content.replace(/\r\n/g, '\n');
   }
 
   async executeTool(toolUse: ToolUse): Promise<ToolResult> {
@@ -173,7 +210,12 @@ export class ToolExecutor {
     }
 
     const filePath = resolve(this.workDir, input.file_path);
-    writeFileSync(filePath, input.content, 'utf-8');
+
+    // Normalize line endings to platform default
+    // This ensures that files written on Windows use \r\n and Unix uses \n
+    const normalizedContent = this.normalizeLineEndings(input.content, EOL);
+
+    writeFileSync(filePath, normalizedContent, 'utf-8');
     return `File written successfully: ${filePath}`;
   }
 
@@ -195,18 +237,41 @@ export class ToolExecutor {
     }
 
     let content = readFileSync(filePath, 'utf-8');
+
+    // Detect the original line ending style to preserve it
+    const originalEOL = this.detectLineEnding(content);
+
     const oldString = input.old_string;
     const newString = input.new_string;
     const replaceAll = input.replace_all || false;
 
+    // Normalize content and search strings to \n for matching
+    // This allows matching regardless of line ending differences
+    const normalizedContent = this.normalizeForMatching(content);
+    const normalizedOld = this.normalizeForMatching(oldString);
+
     if (replaceAll) {
-      content = content.split(oldString).join(newString);
+      // Replace all occurrences
+      const normalizedNew = this.normalizeForMatching(newString);
+      const replaced = normalizedContent.split(normalizedOld).join(normalizedNew);
+      // Convert back to original line ending style
+      content = this.normalizeLineEndings(replaced, originalEOL);
     } else {
-      const index = content.indexOf(oldString);
+      // Replace first occurrence
+      const index = normalizedContent.indexOf(normalizedOld);
       if (index === -1) {
         throw new Error(`String not found in file: ${oldString}`);
       }
-      content = content.substring(0, index) + newString + content.substring(index + oldString.length);
+
+      // Perform replacement in normalized content
+      const normalizedNew = this.normalizeForMatching(newString);
+      const replaced =
+        normalizedContent.substring(0, index) +
+        normalizedNew +
+        normalizedContent.substring(index + normalizedOld.length);
+
+      // Convert back to original line ending style
+      content = this.normalizeLineEndings(replaced, originalEOL);
     }
 
     writeFileSync(filePath, content, 'utf-8');
