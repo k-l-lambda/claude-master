@@ -9,6 +9,40 @@ export interface Config {
   maxRounds?: number;
   useThinking?: boolean;  // Control whether to use thinking feature
   debugMode?: boolean;    // Enable mock responses for testing
+
+  // Provider configuration
+  provider?: 'claude' | 'qwen';  // Default provider for both Instructor and Worker
+  instructorProvider?: 'claude' | 'qwen';  // Override provider for Instructor
+  workerProvider?: 'claude' | 'qwen';  // Override provider for Worker
+
+  // Qwen-specific configuration
+  qwenApiKey?: string;
+  qwenBaseUrl?: string;
+  qwenModel?: string;
+
+  // Provider-specific configs
+  claudeConfig?: ClaudeConfig;
+  qwenConfig?: QwenConfig;
+}
+
+/**
+ * Claude-specific configuration
+ */
+export interface ClaudeConfig {
+  authToken?: string;
+  apiKey?: string;
+  baseURL?: string;
+  defaultModel: string;
+}
+
+/**
+ * Qwen-specific configuration
+ */
+export interface QwenConfig {
+  apiKey: string;
+  baseUrl: string;
+  defaultModel: string;
+  timeout?: number;
 }
 
 export interface Message {
