@@ -46,6 +46,32 @@ export class InstructorManager {
     return cleaned;
   }
 
+  /**
+   * Get platform information for system prompt
+   */
+  private getPlatformInfo(): {
+    platformName: string;
+  } {
+    const platform = process.platform;
+
+    let platformName = '';
+    switch (platform) {
+      case 'win32':
+        platformName = 'Windows';
+        break;
+      case 'darwin':
+        platformName = 'macOS';
+        break;
+      case 'linux':
+        platformName = 'Linux';
+        break;
+      default:
+        platformName = platform;
+    }
+
+    return { platformName };
+  }
+
   constructor(config: Config, userInstruction: string, workDir: string) {
     this.client = new ClaudeClient(config);
     this.config = config;
@@ -54,8 +80,16 @@ export class InstructorManager {
     // Instructor has no permanently forbidden tools (empty array)
     this.toolExecutor = new ToolExecutor(workDir, allowedToolNames, []);
 
+    // Detect platform information
+    const platformInfo = this.getPlatformInfo();
+
     // Instructor's role: understand the task and orchestrate the Worker
     this.systemPrompt = `${userInstruction}
+
+## System Environment
+
+**Platform:** ${platformInfo.platformName}
+**Working Directory:** ${workDir}
 
 You are the Instructor AI. Your role is to:
 1. Read and understand task requirements (you have file reading tools)
