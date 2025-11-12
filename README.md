@@ -148,17 +148,19 @@ Press ESC during execution to:
 - Chooses appropriate Worker model
 - Reviews Worker's output
 - Makes decisions
+- Manages Worker's context and permissions
 
-Tools: File operations, Git commands
+Tools: File operations, Git commands, Worker management (call_worker, tell_worker, etc.)
 
 **Worker (Implementation Executor)**
-- Executes specific instructions
+- Executes specific instructions from Instructor
 - Writes and modifies code
 - Runs commands (npm, build, test)
 - Searches the web for documentation
-- Reports results back
+- Uses read-only git commands
+- Reports results back to Instructor
 
-Tools: File operations, Bash commands, Web search
+Tools: File operations, Bash commands, Web search, Git status (read-only)
 
 ### Communication Flow
 
@@ -167,11 +169,11 @@ User → Instructor (with task)
          ↓
    [Thinks deeply about approach]
          ↓
-   Tell worker (use sonnet): Create project structure
+   call_worker(system_prompt, instruction, model='sonnet')
          ↓
-      Worker → [Executes task]
+      Worker → [Executes task with tools]
          ↓
-   Worker says: [Result]
+   [Worker returns result]
          ↓
    Instructor → Reviews and continues or says DONE
 ```
@@ -204,19 +206,38 @@ npm start "Read README.md to get aware your task" -d ./your-project
 
 ### Communication Formats
 
-Instructor communicates with Worker using:
+Instructor communicates with Worker using tool calls:
 
-```bash
-# Simple format
-Tell worker: [instruction]
+**Three Worker Tools Available:**
 
-# With model selection
-Tell worker (use opus): [complex instruction]
-Tell worker (model: haiku): [quick command]
+1. **call_worker** - Reset Worker's context with new system prompt
+   ```typescript
+   call_worker({
+     system_prompt: "You are a backend developer...",
+     instruction: "Implement user authentication",
+     model: "sonnet"  // optional: opus, sonnet, haiku
+   })
+   ```
 
-# Task completion
-**DONE**
-```
+2. **call_worker_with_file** - Load system prompt from file
+   ```typescript
+   call_worker_with_file({
+     system_prompt_file: "path/to/prompt.txt",
+     instruction: "Implement the feature",
+     model: "haiku"
+   })
+   ```
+
+3. **tell_worker** - Continue existing conversation
+   ```typescript
+   tell_worker({
+     message: "Add error handling to the code",
+     model: "sonnet"  // optional
+   })
+   ```
+
+**Task Completion:**
+When task is complete, Instructor responds with "DONE".
 
 ### Available Models
 
@@ -391,17 +412,44 @@ npm publish
 - [Test Cases Guide](tests/cases/README.md) - All available test cases
 - [Architecture](docs/ARCHITECTURE.md) - System architecture (中文)
 
-## 🔍 Worker Tools
+## 🔧 Instructor Tools
+
+### Worker Management
+- `call_worker` - Reset Worker with new system prompt and instruction
+- `call_worker_with_file` - Reset Worker with system prompt from file
+- `tell_worker` - Continue Worker's existing conversation
+- `set_worker_timeout` - Adjust Worker's inactivity timeout (30-600s)
+- `grant_worker_permission` - Grant Worker access to restricted tools
+- `revoke_worker_permission` - Revoke Worker's tool permissions
 
 ### File Operations
-- `read_file` - Read file contents with optional offset/limit
-- `write_file` - Create new files
+- `read_file` - Read file contents
+- `write_file` - Create/overwrite files
 - `edit_file` - Edit existing files (replace text)
 - `glob_files` - Find files by glob pattern
 - `grep_search` - Search code with regex
 
+### Git Operations
+- `git_status` - Read-only git commands (status, log, diff, etc.)
+- `git_command` - Write git commands (commit, push, etc.)
+
 ### Execution
-- `bash_command` - Execute safe bash commands (git blocked)
+- `bash_command` - Execute bash commands
+
+## 🔍 Worker Tools
+
+### File Operations
+- `read_file` - Read file contents with optional offset/limit
+- `write_file` - Create/overwrite files
+- `edit_file` - Edit existing files (replace text)
+- `glob_files` - Find files by glob pattern
+- `grep_search` - Search code with regex
+
+### Git Operations (Read-only)
+- `git_status` - Read-only git commands (status, log, diff, show, etc.)
+
+### Execution
+- `bash_command` - Execute safe bash commands (non-destructive)
 
 ### Research
 - `web_search` - Search the internet for information
